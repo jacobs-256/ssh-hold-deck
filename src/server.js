@@ -272,6 +272,6 @@ const server = http.createServer(async (req, res) => {
   finally { if (operationName) channelOperations.delete(operationName); }
 });
 const terminals = attachTerminals(server, {channels,run,holdDir, session: req => auth.session(req)});
-server.listen(port, '127.0.0.1', () => console.log(`ssh-hold web: http://127.0.0.1:${port}`));
+server.listen(port, '127.0.0.1', () => console.log(`SSH Hold Deck: http://127.0.0.1:${port}`));
 setImmediate(() => refreshStatuses().catch(error => console.error('状态更新失败:', error.message)));
 setInterval(() => refreshStatuses().catch(error => console.error('状态更新失败:', error.message)), 30000).unref();

@@ -77,7 +77,7 @@ Choose a JumpServer asset when creating a channel, search authorized assets, and
 | `SSH_HOLD_WEB_DATA_DIR` | Project `data/` directory | SQLite and uploaded private-key storage |
 
 ```sh
-PORT=8888 SSH_HOLD_WEB_DATA_DIR="$HOME/.local/share/ssh-hold-web" npm start
+PORT=8888 SSH_HOLD_WEB_DATA_DIR="$HOME/.local/share/ssh-hold-deck" npm start
 ```
 
 ## Storage and Security

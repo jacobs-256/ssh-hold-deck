@@ -77,7 +77,7 @@ npm start
 | `SSH_HOLD_WEB_DATA_DIR` | 项目下的 `data/` | SQLite 和上传私钥的存储目录 |
 
 ```sh
-PORT=8888 SSH_HOLD_WEB_DATA_DIR="$HOME/.local/share/ssh-hold-web" npm start
+PORT=8888 SSH_HOLD_WEB_DATA_DIR="$HOME/.local/share/ssh-hold-deck" npm start
 ```
 
 ## 存储与安全

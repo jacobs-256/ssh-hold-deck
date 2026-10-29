@@ -1,7 +1,7 @@
 (() => {
   const login = document.createElement('dialog');
   login.id = 'login-dialog';
-  login.innerHTML = I18n.html(`<form id="login-form"><div class="modal-head"><div><p class="login-brand">SSH Hold</p><h2>密码登录</h2></div><i data-lucide="lock-keyhole"></i></div><label>密码<input name="password" type="password" required maxlength="256" autocomplete="current-password"></label><label id="login-confirm" hidden>确认密码<input name="confirmPassword" type="password" maxlength="256" autocomplete="new-password"></label><p class="error" role="alert"></p><div class="actions"><button class="primary" type="submit">登录</button></div></form>`);
+  login.innerHTML = I18n.html(`<form id="login-form"><div class="modal-head"><div><p class="login-brand">SSH Hold Deck</p><h2>密码登录</h2></div><i data-lucide="lock-keyhole"></i></div><label>密码<input name="password" type="password" required maxlength="256" autocomplete="current-password"></label><label id="login-confirm" hidden>确认密码<input name="confirmPassword" type="password" maxlength="256" autocomplete="new-password"></label><p class="error" role="alert"></p><div class="actions"><button class="primary" type="submit">登录</button></div></form>`);
   document.body.append(login);
   const loginForm = login.querySelector('form');
   let setup = false, submitting = false;

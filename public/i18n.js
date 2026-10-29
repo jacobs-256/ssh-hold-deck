@@ -1,9 +1,9 @@
 (() => {
   const english = {
     '颜色模式': 'Appearance', '浅色模式': 'Light', '深色模式': 'Dark',
-    'SSH Hold 管理台': 'SSH Hold Console', '通道管理': 'Channel Management',
-    '通道列表': 'Channels', '▦　通道列表': 'Channels', 'SSH Hold　/　通道列表': 'SSH Hold / Channels',
-    '管理本机 SSH Hold 通道与连接状态': 'Manage SSH Hold connections and status', '集成管理': 'Integrations',
+    'SSH Hold Deck 管理台': 'SSH Hold Deck Console', '通道管理': 'Channel Management',
+    '通道列表': 'Channels', '▦　通道列表': 'Channels', 'SSH Hold Deck　/　通道列表': 'SSH Hold Deck / Channels',
+    '管理本机 SSH Hold Deck 通道与连接状态': 'Manage SSH Hold Deck connections and status', '集成管理': 'Integrations',
     '搜索通道名、目标地址...': 'Search channels or destinations...', '全部状态': 'All Statuses',
     '全部认证': 'All Authentication', 'SSH 私钥': 'SSH Key', '用户名 / 密码': 'Password',
     '刷新': 'Refresh', '＋ 添加通道': '+ Add Channel', '全部通道': 'All Channels', '畅通': 'Connected',
@@ -149,7 +149,7 @@
   function html(source) { const template = document.createElement('template'); template.innerHTML = source; translate(template.content); return template.innerHTML; }
   document.documentElement.lang = language;
   document.querySelector('header .crumb')?.remove();
-  document.title = t('SSH Hold 管理台');
+  document.title = t('SSH Hold Deck 管理台');
   translate(document.body);
   const picker = document.createElement('div'); picker.className = 'language-control';
   picker.innerHTML = `<button class="language-toggle" type="button" aria-label="${t('语言')}" title="${t('语言')}" aria-haspopup="menu" aria-expanded="false" aria-controls="language-menu"><i data-lucide="languages"></i></button><div id="language-menu" class="language-menu" role="menu" aria-label="${t('语言')}" hidden>${[['auto', t('自动')], ['zh-CN', '简体中文'], ['en', 'English']].map(([value, label]) => `<button type="button" role="menuitemradio" aria-checked="${value === preference}" data-language="${value}"><span>${label}</span><i data-lucide="check" ${value === preference ? '' : 'style="visibility:hidden"'}></i></button>`).join('')}</div>`;
