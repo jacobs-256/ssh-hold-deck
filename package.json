@@ -1,0 +1,24 @@
+{
+  "name": "ssh-hold-deck",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test tests/unit/*.test.js tests/integration/*.test.js && node tests/integration/verify-sqlite.mjs",
+    "postinstall": "node scripts/setup-pty.js"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "lucide": "^1.64.0",
+    "node-pty": "^1.1.0",
+    "ws": "^8.22.0"
+  },
+  "allowScripts": {
+    "node-pty@1.1.0": true
+  }
+}
