@@ -3,6 +3,8 @@ import { jumpOptions } from './jump.js';
 import { JumpServerClient, normalizeServer, publicServer } from './jumpserver.js';
 import { attachTerminals } from './terminal-server.js';
 import { createAuth } from './auth.js';
+import { createHostKeyManager } from './host-keys.js';
+import { validOrigin } from './request-origin.js';
 import http from 'node:http';
 import { execFile, spawn } from 'node:child_process';
 import { readFile, writeFile, mkdir, chmod, readdir } from 'node:fs/promises';
@@ -15,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.env.PORT || 8787);
+const bindHost = process.env.HOST || '0.0.0.0';
 const holdDir = process.env.SSH_HOLD_DIR || path.join(os.homedir(), '.ssh', 'hold');
 const vaultFile = path.join(holdDir, '.web-vault');
 const vaultKey = crypto.createHash('sha256').update(`${os.userInfo().username}:${os.hostname()}:ssh-hold-web-v1`).digest();
@@ -93,6 +96,22 @@ if (!db.prepare("SELECT value FROM settings WHERE key = 'initialized'").get()) {
 function parseList(text) { const out = []; let current; for (const line of text.split('\n')) { const m = line.match(/^  (\S.*)$/); if (m) { current = { name: m[1].trim() }; out.push(current); continue; } if (!current) continue; const kv = line.match(/^    ([^:]+):\s?(.*)$/); if (!kv) continue; const k = { '目标':'target', '开通':'started', '通道':'status', '保活':'keepalive', '远端':'remote' }[kv[1]]; if (k) current[k] = kv[2]; } return out; }
 async function channels() { const live = new Map(db.prepare('SELECT name, snapshot FROM channel_status').all().map(row => [row.name, JSON.parse(row.snapshot)])); const vault = await loadVault(); return Object.entries(vault).map(([name, saved]) => ({ name, started: saved.started || '', status: '未知', keepalive: '未知', ...live.get(name), target: `${saved.target}:${saved.port || 22}`, auth: saved.auth || 'unknown', identity: saved.identity || '', insecure: Boolean(saved.insecure), jump: saved.jump || '', ...displayChannel(saved), ...connectionAvailability(saved) })); }
 let statusRefresh;
+let refreshSeconds = Number(db.prepare("SELECT value FROM settings WHERE key = 'refreshSeconds'").get()?.value || 30);
+let refreshTimer;
+const statusClients = new Set();
+async function publishChannels() {
+  if (!statusClients.size) return;
+  const message = `event: channels\ndata: ${JSON.stringify(await channels())}\n\n`;
+  for (const client of statusClients) {
+    if (!auth.session(client.req)) { client.res.end(); continue; }
+    if (!client.res.write(message)) client.res.end();
+  }
+}
+function scheduleRefresh() {
+  clearInterval(refreshTimer);
+  refreshTimer = setInterval(() => refreshStatuses().catch(error => console.error('状态更新失败:', error.message)), refreshSeconds * 1000);
+  refreshTimer.unref();
+}
 function refreshStatuses() {
   if (statusRefresh) return statusRefresh;
   statusRefresh = (async () => {
@@ -100,15 +119,25 @@ function refreshStatuses() {
     if (!result.ok) throw new Error(result.stderr || '读取通道状态失败');
     const live = new Map(parseList(result.stdout).map(channel => [channel.name, channel]));
     const update = db.prepare('INSERT OR REPLACE INTO channel_status (name, snapshot) VALUES (?, ?)');
-    for (const row of db.prepare('SELECT name FROM channels').all()) update.run(row.name, JSON.stringify({ ...(live.get(row.name) || { status: '已断开', keepalive: '停了' }), checkedAt: new Date().toISOString() }));
+    let changed = false;
+    for (const row of db.prepare('SELECT name FROM channels').all()) {
+      if (channelOperations.has(row.name)) continue;
+      const snapshot = live.get(row.name) || { status: '已断开', keepalive: '停了' };
+      const previous = JSON.parse(db.prepare('SELECT snapshot FROM channel_status WHERE name = ?').get(row.name)?.snapshot || '{}');
+      delete previous.checkedAt;
+      if (JSON.stringify(previous) !== JSON.stringify(snapshot)) changed = true;
+      update.run(row.name, JSON.stringify({ ...snapshot, checkedAt: new Date().toISOString() }));
+    }
+    if (changed) await publishChannels();
   })().finally(() => { statusRefresh = undefined; });
   return statusRefresh;
 }
 async function resolveConnection(config) { return config.source === 'jumpserver' ? new JumpServerClient(jumpServer(config.serverId)).resolve(config) : config; }
-async function startChannel(config, resolved) {
+const hostKeys = createHostKeyManager();
+async function startChannel(config, resolved, session) {
   const body = resolved || await resolveConnection(config);
   const proxy = await jumpOptions(body, await loadVault(), holdDir);
-  return new Promise(resolve => {
+  const result = await new Promise(resolve => {
     const args = ['start', '-n', body.name, '-p', String(body.port || 22), '-o', 'ConnectTimeout=15', '-o', 'ConnectionAttempts=1'];
     if (body.insecure) args.push('--insecure');
     if (body.auth === 'key') args.push('-i', body.identity); else args.push('--password-stdin');
@@ -124,6 +153,11 @@ async function startChannel(config, resolved) {
     child.on('close', code => { clearTimeout(timer); resolve({ ok: code === 0 && !timedOut, stdout: redact(stdout), stderr: timedOut ? 'SSH 连接超时，请检查网关地址、端口和访问策略' : redact(stderr) }); });
     child.stdin.end(body.auth === 'key' ? '' : body.password || '');
   });
+  if (!result.ok) {
+    const hostKeyChallenge = await hostKeys.challenge(result.stderr || '', body, proxy, session).catch(() => null);
+    if (hostKeyChallenge) throw Object.assign(new Error('SSH 主机指纹已变化，请核实后确认信任'), { hostKeyChallenge });
+  }
+  return result;
 }
 async function channelResult(name, config) {
   const result = await run(['status', name]);
@@ -150,7 +184,7 @@ const server = http.createServer(async (req, res) => {
   let operationName;
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
-    if (url.pathname.startsWith('/api/') && (!/^(127\.0\.0\.1|localhost):\d+$/.test(req.headers.host || '') || req.headers.origin && req.headers.origin !== `http://${req.headers.host}`)) return json(res, 403, { error: '请求来源无效' });
+    if (url.pathname.startsWith('/api/') && !validOrigin(req)) return json(res, 403, { error: '请求来源无效' });
     if (url.pathname.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
     if (url.pathname === '/api/auth/status' && req.method === 'GET') return json(res, 200, { configured: auth.configured(), authenticated: Boolean(auth.session(req)) });
     if (['/api/auth/setup', '/api/auth/login'].includes(url.pathname) && req.method === 'POST') {
@@ -159,6 +193,29 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
     if (url.pathname.startsWith('/api/') && !auth.session(req)) return json(res, 401, { error: '请先登录', setupRequired: !auth.configured() });
+    if (url.pathname === '/api/host-keys/trust' && req.method === 'POST') {
+      const { token } = await readBody(req);
+      await hostKeys.trust(token, auth.session(req));
+      return json(res, 200, { ok: true });
+    }
+    if (url.pathname === '/api/settings/refresh') {
+      if (req.method === 'GET') return json(res, 200, { seconds: refreshSeconds });
+      if (req.method === 'POST') {
+        const { seconds } = await readBody(req);
+        if (!Number.isInteger(seconds) || seconds < 5 || seconds > 3600) return json(res, 400, { error: '刷新间隔必须为 5–3600 秒的整数' });
+        db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('refreshSeconds', ?)").run(String(seconds));
+        refreshSeconds = seconds; scheduleRefresh();
+        return json(res, 200, { seconds: refreshSeconds });
+      }
+    }
+    if (url.pathname === '/api/channels/events' && req.method === 'GET') {
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', 'connection': 'keep-alive' });
+      res.write(`retry: 3000\nevent: channels\ndata: ${JSON.stringify(await channels())}\n\n`);
+      const client = { req, res }; statusClients.add(client);
+      const heartbeat = setInterval(() => { if (!auth.session(req)) res.end(); else if (!res.write(': heartbeat\n\n')) res.end(); }, 15000);
+      res.on('close', () => { clearInterval(heartbeat); statusClients.delete(client); });
+      return;
+    }
     if (url.pathname === '/api/auth/password' && req.method === 'POST') {
       await auth.change(req, res, await readBody(req));
       terminals.revokeInvalid();
@@ -213,7 +270,7 @@ const server = http.createServer(async (req, res) => {
     if(vendorFiles[url.pathname]){const [file,type]=vendorFiles[url.pathname];res.writeHead(200,{'content-type':type});return res.end(await readFile(path.join(root,'node_modules',file)));}
     if (url.pathname === '/api/channels' && req.method === 'GET') return json(res, 200, { channels: await channels() });
     if (url.pathname === '/api/channels/refresh' && req.method === 'POST') { await refreshStatuses(); return json(res, 200, { channels: await channels() }); }
-    if (url.pathname === '/api/channels/reload' && req.method === 'POST') { const result = await importChannels(); return json(res, 200, { ...result, channels: await channels() }); }
+    if (url.pathname === '/api/channels/reload' && req.method === 'POST') { const result = await importChannels(); await publishChannels(); return json(res, 200, { ...result, channels: await channels() }); }
     if (url.pathname === '/api/channels' && req.method === 'POST') {
       const b = await readBody(req);
       if (!/^[A-Za-z0-9._-]+$/.test(b.name || '')) return json(res, 400, { error: '通道名称无效' });
@@ -222,7 +279,7 @@ const server = http.createServer(async (req, res) => {
       if ((await loadVault())[b.name] || existsSync(path.join(holdDir, b.name, 'meta'))) return json(res, 409, { error: '通道名称已存在，请使用其他名称' });
       await storeIdentity(b);
       const config = await channelConfig(b);
-      const r = await startChannel({ ...config, name: b.name });
+      const r = await startChannel({ ...config, name: b.name }, undefined, auth.session(req));
       if (!r.ok) return json(res, 400, { error: r.stderr || r.stdout || '连接失败' });
       saveChannel(b.name, config);
       return json(res, 201, { ok: true, channel: await channelResult(b.name, config) });
@@ -258,20 +315,20 @@ const server = http.createServer(async (req, res) => {
         saveChannel(name, config);
         const stopped = await stopIfPresent(name);
         if (!stopped.ok) return json(res, 400, { error: stopped.stderr || '关闭旧连接失败' });
-        const connected = await startChannel({ ...config, name }, resolved);
+        const connected = await startChannel({ ...config, name }, resolved, auth.session(req));
         if (!connected.ok) return json(res, 400, { error: connected.stderr || connected.stdout || '配置已保存，但连接失败，请检查认证信息后重试' });
         return json(res, 200, { ok: true, channel: await channelResult(name, config) });
       }
-      if (req.method === 'POST' && url.searchParams.get('action') === 'reconnect') { const v = await loadVault(); const current = (await channels()).find(x => x.name === name); if (!current) return json(res, 404, { error: '通道不存在' }); const [target, port = '22'] = (current.target || '').split(/:(?=\d+$)/); const c = { name, target, port, ...(v[name] || {}) }; const availability = connectionAvailability(c); if (!availability.canConnect) return json(res, 400, { error: availability.connectDisabledReason }); await jumpOptions(c, v, holdDir); const resolved = await resolveConnection(c); const stop = await stopIfPresent(name); if (!stop.ok && !/没有名为/.test(stop.stderr)) return json(res, 400, { error: stop.stderr }); const r = await startChannel(c, resolved); return json(res, r.ok ? 200 : 400, r.ok ? { ok: true, channel: await channelResult(name, c) } : { error: r.stderr || r.stdout || '重连失败' }); }
+      if (req.method === 'POST' && url.searchParams.get('action') === 'reconnect') { const v = await loadVault(); const current = (await channels()).find(x => x.name === name); if (!current) return json(res, 404, { error: '通道不存在' }); const [target, port = '22'] = (current.target || '').split(/:(?=\d+$)/); const c = { name, target, port, ...(v[name] || {}) }; const availability = connectionAvailability(c); if (!availability.canConnect) return json(res, 400, { error: availability.connectDisabledReason }); await jumpOptions(c, v, holdDir); const resolved = await resolveConnection(c); const stop = await stopIfPresent(name); if (!stop.ok && !/没有名为/.test(stop.stderr)) return json(res, 400, { error: stop.stderr }); const r = await startChannel(c, resolved, auth.session(req)); return json(res, r.ok ? 200 : 400, r.ok ? { ok: true, channel: await channelResult(name, c) } : { error: r.stderr || r.stdout || '重连失败' }); }
     }
     if (url.pathname === '/' || url.pathname === '/index.html') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(await readFile(path.join(root, 'public', 'index.html'))); }
     if (['/app.js', '/jumpserver-ui.js', '/auth-ui.js', '/i18n.js'].includes(url.pathname)) { res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8' }); return res.end(await readFile(path.join(root, 'public', url.pathname.slice(1)))); }
     if (url.pathname.startsWith('/assets/')) { const file = path.join(root, 'public', url.pathname); if (!existsSync(file)) return json(res, 404, { error: 'Not found' }); res.writeHead(200, { 'content-type': 'text/css' }); return res.end(await readFile(file)); }
     json(res, 404, { error: 'Not found' });
-  } catch (e) { json(res, e.status || 400, { error: e.message }); }
-  finally { if (operationName) channelOperations.delete(operationName); }
+  } catch (e) { json(res, e.status || 400, { error: e.message, ...(e.hostKeyChallenge ? { hostKeyChallenge: e.hostKeyChallenge } : {}) }); }
+  finally { if (operationName) { channelOperations.delete(operationName); publishChannels().catch(console.error); } }
 });
 const terminals = attachTerminals(server, {channels,run,holdDir, session: req => auth.session(req)});
-server.listen(port, '127.0.0.1', () => console.log(`SSH Hold Deck: http://127.0.0.1:${port}`));
+server.listen(port, bindHost, () => console.log(`SSH Hold Deck: http://${bindHost}:${port}`));
 setImmediate(() => refreshStatuses().catch(error => console.error('状态更新失败:', error.message)));
-setInterval(() => refreshStatuses().catch(error => console.error('状态更新失败:', error.message)), 30000).unref();
+scheduleRefresh();

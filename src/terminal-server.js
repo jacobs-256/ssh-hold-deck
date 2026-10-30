@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import * as pty from 'node-pty';
+import { validOrigin } from './request-origin.js';
 
 export function attachTerminals(server, { channels, run, holdDir, session = () => 'local' }) {
   const tokens = new Map();
@@ -8,7 +9,7 @@ export function attachTerminals(server, { channels, run, holdDir, session = () =
   const clients = new Map();
   const wss = new WebSocketServer({ noServer: true, maxPayload: 65536 });
   function sameOrigin(req) {
-    return req.headers.origin === `http://${req.headers.host}` && /^127\.0\.0\.1:\d+$/.test(req.headers.host || '');
+    return validOrigin(req, true);
   }
   async function issue(req, name) {
     const owner = session(req);

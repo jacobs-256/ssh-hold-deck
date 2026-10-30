@@ -9,7 +9,8 @@ A Node.js web management layer built on top of the open-source [ssh-hold](https:
 - Create, edit, connect, disconnect, and delete channels; filter by name, address, status, or authentication method.
 - Separate username and host fields; password authentication, private-key paths, and private-key file selection.
 - Use an existing connected channel as a jump host by reusing its ControlMaster socket.
-- Read lists directly from SQLite; check connection status in the background every 30 seconds or on demand.
+- Read lists directly from SQLite; configure background status checks under Settings → Refresh Settings (5–3600 seconds, default 30). Changes are pushed to open pages through SSE and update affected rows automatically; manual refresh checks immediately.
+- Paginated channels (10/20/50/100 rows, default 20), newest first, with independently scrolling rows, a fixed table header, and pinned actions.
 - Import `~/.ssh/hold/*/meta` through Reload, updating existing names while retaining saved credentials.
 - Multi-tab xterm.js terminals, including multiple shells per channel, resizing, collapsing, and fullscreen.
 - Password-protected web access, password changes, logout, and English/Simplified Chinese interface options.
@@ -41,7 +42,7 @@ npm start
 
 Open [http://127.0.0.1:8787](http://127.0.0.1:8787). On first use, create a web login password of 8–256 characters. This password is separate from SSH credentials.
 
-The service binds only to `127.0.0.1`; use that address to access it. The interface language selector offers Automatic, Simplified Chinese, and English. Automatic follows the browser language. This repository defaults to the English README; use the link above for Chinese documentation.
+The service binds to `0.0.0.0` for trusted LAN access. Other computers can use `http://<server-LAN-IP>:8787`; allow incoming TCP 8787 in the server firewall if needed. Set `HOST=127.0.0.1` for local-only access. Login and same-origin checks apply to LAN access too. HTTP does not encrypt passwords or terminal traffic; use a trusted network. The interface language selector offers Automatic, Simplified Chinese, and English. Automatic follows the browser language. This repository defaults to the English README; use the link above for Chinese documentation.
 
 ## Usage
 
@@ -73,6 +74,7 @@ Choose a JumpServer asset when creating a channel, search authorized assets, and
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `8787` | Local HTTP port |
+| `HOST` | `0.0.0.0` | Listen address; use `127.0.0.1` for local-only access |
 | `SSH_HOLD_DIR` | `~/.ssh/hold` | CLI metadata and socket directory |
 | `SSH_HOLD_WEB_DATA_DIR` | Project `data/` directory | SQLite and uploaded private-key storage |
 
@@ -81,6 +83,8 @@ PORT=8888 SSH_HOLD_WEB_DATA_DIR="$HOME/.local/share/ssh-hold-deck" npm start
 ```
 
 ## Storage and Security
+
+When an SSH host key changes, the connection dialog shows the previous and currently offered fingerprints. Verify the new fingerprint through the server console or administrator before confirming. Deck backs up `~/.ssh/known_hosts`, replaces only the selected host entry, and retries the connection with normal host verification. Confirmation expires after two minutes. Unsupported or unverifiable conflicts retain the original SSH error.
 
 The database is `data/channels.sqlite`; uploaded keys are stored in `data/keys/`. Database and uploaded key files use mode 0600. Web passwords use salted scrypt hashes. Session cookies are HttpOnly and SameSite=Strict and expire after 12 hours. Terminals require a valid login session and a single-use token valid for 30 seconds.
 
@@ -110,7 +114,7 @@ Main modules: `src/server.js` (HTTP, SQLite, channel operations), `src/auth.js` 
 | PTY startup failure | Reinstall with `npm ci`, run `node scripts/setup-pty.js`, and install native build tools if needed |
 | Connect button disabled | Edit the channel to provide a username, host, and password or private-key path |
 | Jump unavailable | Connect the jump channel first; Reload its metadata if needed |
-| Terminal rejected | Use `127.0.0.1`, sign in again, and confirm that the channel is connected |
+| Terminal rejected | Use localhost or the server LAN IP, sign in again, and confirm that the channel is connected |
 | Connected but keepalive stopped | The SSH master and extra keepalive process are independent; Refresh to verify current status |
 
 ## Upstream Project and Acknowledgments

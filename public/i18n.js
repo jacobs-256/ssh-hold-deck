@@ -1,5 +1,16 @@
 (() => {
   const english = {
+    '每页条数': 'Rows per page', '10 / 页': '10 / page', '20 / 页': '20 / page', '50 / 页': '50 / page', '100 / 页': '100 / page',
+    '首页': 'First page', '上一页': 'Previous page', '下一页': 'Next page', '末页': 'Last page', '页码': 'Page number',
+    'SSH 主机指纹已变化': 'SSH host key has changed', '原指纹': 'Previous fingerprints', '当前指纹': 'Current fingerprint',
+    'SSH 主机指纹已变化，请核实后确认信任': 'SSH host key has changed. Verify the fingerprint before trusting it.',
+    '指纹确认已过期，请重新连接': 'Host key confirmation expired. Connect again.',
+    '正在更新主机指纹，请稍后重试': 'A host key update is in progress. Try again shortly.',
+    '主机指纹文件已变化，请重新连接后确认': 'Known hosts changed. Connect again to review the fingerprint.',
+    '请通过服务器控制台或管理员核实当前指纹。确认信任后将备份并更新本机记录，然后自动重连。': 'Verify the current fingerprint through the server console or administrator. Confirming trust backs up and updates the local record, then reconnects automatically.',
+    '刷新设置': 'Refresh Settings', '刷新间隔（秒）': 'Refresh interval (seconds)',
+    '刷新间隔必须为 5–3600 秒的整数': 'Refresh interval must be an integer between 5 and 3600 seconds',
+    '左右滚动通道列表': 'Scroll channels horizontally',
     '颜色模式': 'Appearance', '浅色模式': 'Light', '深色模式': 'Dark',
     'SSH Hold Deck 管理台': 'SSH Hold Deck Console', '通道管理': 'Channel Management',
     '通道列表': 'Channels', '▦　通道列表': 'Channels', 'SSH Hold Deck　/　通道列表': 'SSH Hold Deck / Channels',

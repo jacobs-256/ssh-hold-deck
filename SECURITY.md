@@ -1,6 +1,6 @@
 # Security
 
-SSH Hold Deck can execute commands on connected servers. It is designed as a local, single-password console, not a public multi-user service. The current server binds to `127.0.0.1`; exposing it through a proxy or changing the bind address requires a separate security review. Public Internet deployment is not supported by the current design.
+SSH Hold Deck can execute commands on connected servers. It is a single-password console for local or trusted LAN use, not a public multi-user service. The server binds to `0.0.0.0` by default; set `HOST=127.0.0.1` for local-only access. Host headers must identify a local interface or hostname, and browser API and terminal requests must be same-origin. HTTP does not encrypt login credentials or terminal traffic. Restrict access to trusted networks with a firewall. Public Internet deployment is not supported by the current design.
 
 ## Data Protection Boundaries
 
@@ -9,6 +9,7 @@ SSH Hold Deck can execute commands on connected servers. It is designed as a loc
 - SQLite status snapshots are not encrypted. Uploaded private keys are plaintext files with mode 0600. Treat the entire data directory as sensitive.
 - Terminals require a login session, same-origin validation, and a single-use token expiring after 30 seconds. Terminal input/output is not deliberately persisted by the application. Remote systems and shell history may still record commands.
 - Disabling SSH host fingerprint checks weakens host authentication. Use it only when you understand the endpoint and risk.
+- Host key replacement requires explicit confirmation of the offered fingerprint. Verify it independently before accepting; a changed key can indicate interception. Pending confirmations are session-bound, single-use, expire after two minutes, and reject changes to the known-hosts file. Backups are saved beside that file as `.deck-backup-*`.
 - No automated secret rotation, key migration, or password recovery workflow is provided.
 
 Do not commit data directories, SSH metadata, private keys, credentials, session cookies, tokens, or unredacted connection diagnostics. Secure backups and restrict local account access.

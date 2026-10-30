@@ -43,6 +43,30 @@
     area.innerHTML = I18n.html(`<button type="button" class="settings-toggle" title="设置" aria-label="设置" aria-haspopup="menu" aria-expanded="false"><i data-lucide="settings"></i></button><div class="account-menu" role="menu" hidden><button type="button" role="menuitem" data-action="password"><i data-lucide="key-round"></i>修改密码</button><button type="button" role="menuitem" data-action="logout"><i data-lucide="log-out"></i>退出登录</button></div>`);
     document.querySelector('.sidebar').append(area);
     const toggle = area.querySelector('.settings-toggle'), menu = area.querySelector('.account-menu');
+    const refreshButton = document.createElement('button');
+    refreshButton.type = 'button'; refreshButton.setAttribute('role', 'menuitem');
+    refreshButton.innerHTML = I18n.html('<i data-lucide="timer"></i>刷新设置'); menu.prepend(refreshButton);
+    const refreshDialog = document.createElement('dialog'); refreshDialog.id = 'refresh-dialog';
+    refreshDialog.innerHTML = I18n.html('<form><div class="modal-head"><h2>刷新设置</h2><button type="button" class="close" aria-label="关闭">×</button></div><label>刷新间隔（秒）<input name="seconds" type="number" min="5" max="3600" step="1" required value="30"></label><p class="error" role="alert"></p><div class="actions"><button type="button" class="secondary">取消</button><button type="submit" class="primary">保存</button></div></form>');
+    document.body.append(refreshDialog);
+    const refreshForm = refreshDialog.querySelector('form'); let refreshSaving = false;
+    refreshButton.onclick = async () => {
+      closeMenu(); refreshDialog.querySelector('.error').textContent = ''; refreshForm.elements.seconds.disabled = true;
+      refreshForm.querySelector('[type=submit]').disabled = true; refreshDialog.showModal();
+      try { const result = await call('/api/settings/refresh'); refreshForm.elements.seconds.value = result.seconds; }
+      catch (error) { refreshDialog.querySelector('.error').textContent = error.message; }
+      finally { refreshForm.elements.seconds.disabled = false; refreshForm.querySelector('[type=submit]').disabled = false; }
+    };
+    refreshDialog.querySelectorAll('.close,.secondary').forEach(button => button.onclick = () => { if (!refreshSaving) refreshDialog.close(); });
+    refreshDialog.addEventListener('cancel', event => { if (refreshSaving) event.preventDefault(); });
+    refreshForm.onsubmit = async event => {
+      event.preventDefault(); if (refreshSaving) return;
+      refreshSaving = true; const submit = refreshForm.querySelector('[type=submit]'); submit.disabled = true; submit.textContent = I18n.t('保存中…');
+      refreshDialog.querySelector('.error').textContent = '';
+      try { await call('/api/settings/refresh', { seconds: Number(refreshForm.elements.seconds.value) }); refreshDialog.close(); }
+      catch (error) { refreshDialog.querySelector('.error').textContent = error.message; }
+      finally { refreshSaving = false; submit.disabled = false; submit.textContent = I18n.t('保存'); }
+    };
     const closeMenu = () => { menu.hidden = true; toggle.setAttribute('aria-expanded', 'false'); };
     toggle.onclick = () => { menu.hidden = !menu.hidden; toggle.setAttribute('aria-expanded', String(!menu.hidden)); if (!menu.hidden) menu.querySelector('button').focus(); };
     document.addEventListener('click', event => { if (!area.contains(event.target)) closeMenu(); });
