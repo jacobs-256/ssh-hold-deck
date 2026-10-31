@@ -110,6 +110,7 @@ async function publishChannels() {
 }
 function scheduleRefresh() {
   clearInterval(refreshTimer);
+  if (refreshSeconds === 0) return;
   refreshTimer = setInterval(() => refreshStatuses().catch(error => console.error('状态更新失败:', error.message)), refreshSeconds * 1000);
   refreshTimer.unref();
 }
@@ -208,7 +209,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'GET') return json(res, 200, { seconds: refreshSeconds });
       if (req.method === 'POST') {
         const { seconds } = await readBody(req);
-        if (!Number.isInteger(seconds) || seconds < 5 || seconds > 3600) return json(res, 400, { error: '刷新间隔必须为 5–3600 秒的整数' });
+        if (![0,5,10,30,60].includes(seconds)) return json(res, 400, { error: '请选择有效的刷新间隔' });
         db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('refreshSeconds', ?)").run(String(seconds));
         refreshSeconds = seconds; scheduleRefresh();
         return json(res, 200, { seconds: refreshSeconds });

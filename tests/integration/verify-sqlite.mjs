@@ -21,7 +21,8 @@ try{
  await start();await fetch('http://127.0.0.1:18787/api/channels/refresh',{method:'POST'});let result=await get();assert.equal(result.channels.length,1);assert.equal(result.channels[0].target,'root@example.com:2222');assert.equal(result.channels[0].status,'已断开');
  assert.equal((await globalThis.fetch('http://127.0.0.1:18787/api/channels/events')).status,401);
  assert.equal((await(await fetch('http://127.0.0.1:18787/api/settings/refresh')).json()).seconds,30);
- for(const seconds of [0,4,3601,5.5,'10'])assert.equal((await fetch('http://127.0.0.1:18787/api/settings/refresh',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({seconds})})).status,400);
+ for(const seconds of [-1,4,3601,5.5,'10'])assert.equal((await fetch('http://127.0.0.1:18787/api/settings/refresh',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({seconds})})).status,400);
+ assert.equal((await fetch('http://127.0.0.1:18787/api/settings/refresh',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({seconds:0})})).status,200);
  await fetch('http://127.0.0.1:18787/api/settings/refresh',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({seconds:5})});
  const stream=await fetch('http://127.0.0.1:18787/api/channels/events',{signal:AbortSignal.timeout(12000)});
  assert.match(stream.headers.get('content-type'),/text\/event-stream/);
