@@ -5,6 +5,7 @@ import { attachTerminals } from './terminal-server.js';
 import { createAuth } from './auth.js';
 import { createHostKeyManager } from './host-keys.js';
 import { validOrigin } from './request-origin.js';
+import { cliStatus, installCli } from './cli-install.js';
 import http from 'node:http';
 import { execFile, spawn } from 'node:child_process';
 import { readFile, writeFile, mkdir, chmod, readdir } from 'node:fs/promises';
@@ -193,6 +194,11 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
     if (url.pathname.startsWith('/api/') && !auth.session(req)) return json(res, 401, { error: '请先登录', setupRequired: !auth.configured() });
+    if (url.pathname === '/api/system/ssh-hold' && req.method === 'GET') return json(res, 200, await cliStatus());
+    if (url.pathname === '/api/system/ssh-hold/install' && req.method === 'POST') {
+      if (!validOrigin(req, true)) return json(res, 403, {error:'请求来源无效'});
+      return json(res, 200, await installCli());
+    }
     if (url.pathname === '/api/host-keys/trust' && req.method === 'POST') {
       const { token } = await readBody(req);
       await hostKeys.trust(token, auth.session(req));
