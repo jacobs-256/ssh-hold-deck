@@ -255,10 +255,60 @@
       finally{savingPassword=false;inlinePassword.querySelector('button').disabled=false;}
     };
     preferences.querySelector('[data-setting=logout]').onclick=()=>area.querySelector('[data-action=logout]').click();
+    const serviceSection=document.createElement('section');serviceSection.className='preferences-section';
+    serviceSection.innerHTML=I18n.html('<h2>服务配置</h2><div class="settings-group"><div class="preference-row"><div class="setting-copy"><h3>服务端口</h3><p>检测端口占用情况，保存后自动重启 Web 服务并跳转到新地址。Web 终端会断开，SSH 保活通道不受影响。</p><p class="service-active"></p></div><form class="service-port-form"><div class="setting-controls"><input name="port" type="number" min="1024" max="65535" required aria-label="服务端口"><button type="button" class="secondary" data-service="check">检测</button><button type="submit" class="secondary">保存</button></div><p class="setting-feedback" role="status"></p></form></div><div class="preference-row"><div class="setting-copy"><h3>自动选择可用端口</h3><p>配置端口被占用时，自动选择其他可用端口；与端口配置一起保存。</p></div><label class="service-switch"><input type="checkbox" name="autoSelect" role="switch" aria-label="自动选择可用端口"><span aria-hidden="true"></span></label></div></div>');
+    preferences.querySelector('.preferences-version').before(serviceSection);
+    const refreshRow=inlineRefresh.closest('.preference-row');
+    const channelSection=refreshRow.closest('.preferences-section');
+    serviceSection.querySelector('.settings-group').append(refreshRow);
+    channelSection.remove();
+    const serviceForm=serviceSection.querySelector('form'),portInput=serviceForm.elements.port,autoPort=serviceSection.querySelector('[name=autoSelect]'),serviceFeedback=serviceForm.querySelector('.setting-feedback');
+    const serviceToast=document.createElement('div');serviceToast.className='service-toast';serviceToast.hidden=true;serviceToast.setAttribute('role','status');document.body.append(serviceToast);
+    let toastTimer;
+    function notifyService(message,error=false) {
+      clearTimeout(toastTimer);serviceToast.replaceChildren();
+      const icon=document.createElement('i');icon.dataset.lucide=error?'circle-alert':'circle-check';icon.setAttribute('aria-hidden','true');
+      const text=document.createElement('span');text.textContent=message;serviceToast.append(icon,text);serviceToast.classList.toggle('is-error',error);serviceToast.hidden=false;lucide.createIcons();
+      toastTimer=setTimeout(()=>{serviceToast.hidden=true;},4500);
+    }
+    let serviceBusy=false;
+    const lockService=locked=>{serviceBusy=locked;serviceForm.querySelectorAll('input,button').forEach(item=>item.disabled=locked);autoPort.disabled=locked;};
+    async function loadService() {
+      if(serviceBusy)return;lockService(true);
+      try {const result=await call('/api/settings/service');portInput.value=result.port;autoPort.checked=result.autoSelect;serviceSection.querySelector('.service-active').textContent=I18n.t('当前服务端口')+': '+result.activePort;serviceFeedback.textContent='';}
+      catch(error){notifyService(error.message,true);}
+      finally{lockService(false);}
+    }
+    const inspectPort=async(showResult=true)=>{
+      const result=await call('/api/settings/service/check',{port:Number(portInput.value)});
+      const owners=(result.owners||[]).map(owner=>`${owner.command||I18n.t('未知进程')} (PID ${owner.pid})`).join(', ');
+      const message=result.available?I18n.t(result.current?'当前应用正在使用此端口，可继续使用':'端口可用'):I18n.t('端口已被占用')+(owners?': '+owners:' — '+I18n.t('无法读取占用进程详情'));
+      if(showResult||!result.available&&!autoPort.checked)notifyService(message,!result.available);return result;
+    };
+    serviceForm.querySelector('[data-service=check]').onclick=async()=>{
+      if(serviceBusy||!serviceForm.reportValidity())return;lockService(true);
+      try{await inspectPort();}catch(error){notifyService(error.message,true);}finally{lockService(false);}
+    };
+    serviceForm.onsubmit=async event=>{
+      event.preventDefault();if(serviceBusy)return;
+      const requestedPort=Number(portInput.value),fallback=autoPort.checked;lockService(true);
+      try {
+        const result=await inspectPort(false);
+        if(!result.available&&!fallback){serviceFeedback.classList.remove('success');return;}
+        const saved=await call('/api/settings/service',{port:requestedPort,autoSelect:fallback});
+        const destination=new URL(location.href);destination.port=String(saved.activePort);destination.hash='/settings';
+        const portChanged=destination.origin!==location.origin;
+        notifyService(I18n.t(portChanged?'服务已重启，正在跳转…':'服务配置已保存'));
+        if(portChanged)setTimeout(()=>location.assign(destination.href),1200);
+        else {serviceSection.querySelector('.service-active').textContent=I18n.t('当前服务端口')+': '+saved.activePort;}
+      }catch(error){notifyService(error.message,true);}
+      finally{lockService(false);}
+    };
+    portInput.addEventListener('input',()=>{serviceFeedback.textContent='';});
     const setPreferences = open => {
       window.dispatchEvent(new Event('leave-dashboard'));
       preferences.hidden = !open; document.querySelector('main>.workspace').hidden = open; document.querySelector('main>header').hidden = open;
-      if(open){loadRefresh();window.dispatchEvent(new Event('check-cli'));}
+      if(open){loadRefresh();loadService();window.dispatchEvent(new Event('check-cli'));}
       else inlinePassword.reset();
       toggle.classList.toggle('active', open); toggle.setAttribute('aria-current', open ? 'page' : 'false');
       if (open) channelMenu.querySelectorAll('button').forEach(button => {button.classList.remove('active');button.setAttribute('aria-pressed','false');});

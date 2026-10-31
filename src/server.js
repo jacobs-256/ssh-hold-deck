@@ -6,6 +6,7 @@ import { createAuth } from './auth.js';
 import { createHostKeyManager } from './host-keys.js';
 import { validOrigin } from './request-origin.js';
 import { cliStatus, installCli } from './cli-install.js';
+import { bindService, checkPort, validPort } from './service-port.js';
 import http from 'node:http';
 import { execFile, spawn } from 'node:child_process';
 import { readFile, writeFile, mkdir, chmod, readdir } from 'node:fs/promises';
@@ -17,7 +18,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const port = Number(process.env.PORT || 8787);
+let port;
 const bindHost = process.env.HOST || '0.0.0.0';
 const holdDir = process.env.SSH_HOLD_DIR || path.join(os.homedir(), '.ssh', 'hold');
 const vaultFile = path.join(holdDir, '.web-vault');
@@ -37,6 +38,10 @@ const db = new DatabaseSync(dbFile);
 await chmod(dbFile, 0o600);
 db.exec('CREATE TABLE IF NOT EXISTS channels (name TEXT PRIMARY KEY, config TEXT NOT NULL); CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
 db.exec('CREATE TABLE IF NOT EXISTS channel_status (name TEXT PRIMARY KEY, snapshot TEXT NOT NULL)');
+const savedService=JSON.parse(db.prepare("SELECT value FROM settings WHERE key='service'").get()?.value||'{}');
+let configuredPort=Number(process.env.PORT||savedService.port||8787);
+let autoSelectPort=savedService.autoSelect===true;
+let restarting=false;
 const auth = createAuth(db);
 async function loadVault() { return Object.fromEntries(db.prepare('SELECT name, config FROM channels').all().map(row => [row.name, decrypt(row.config)])); }
 function loadJumpServers() { const row = db.prepare("SELECT value FROM settings WHERE key = 'jumpservers'").get(); return row ? decrypt(row.value).servers || [] : []; }
@@ -182,7 +187,7 @@ async function storeIdentity(body) {
   delete body.identityContent;
 }
 
-const server = http.createServer(async (req, res) => {
+const requestHandler = async (req, res) => {
   let operationName;
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -195,6 +200,45 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
     if (url.pathname.startsWith('/api/') && !auth.session(req)) return json(res, 401, { error: '请先登录', setupRequired: !auth.configured() });
+    if(url.pathname==='/api/settings/service'&&req.method==='GET')return json(res,200,{port:configuredPort,activePort:port,autoSelect:autoSelectPort});
+    if(url.pathname==='/api/settings/service/check'&&req.method==='POST') {
+      if(!validOrigin(req,true))return json(res,403,{error:'请求来源无效'});
+      const body=await readBody(req);return json(res,200,await checkPort(body.port,bindHost,port));
+    }
+    if(url.pathname==='/api/settings/service'&&req.method==='POST') {
+      if(!validOrigin(req,true))return json(res,403,{error:'请求来源无效'});
+      const body=await readBody(req);
+      if(!validPort(body.port)||typeof body.autoSelect!=='boolean')return json(res,400,{error:'服务端口必须为 1024–65535 的整数'});
+      if(restarting)return json(res,409,{error:'服务正在重启，请稍后重试'});
+      restarting=true;let replacement;
+      try {
+        const inspection=await checkPort(body.port,bindHost,port);
+        if(!inspection.available&&!body.autoSelect)return json(res,409,{error:'端口已被占用',...inspection});
+        const previous=server,previousTerminals=terminals;
+        let activePort=port;
+        if(body.port!==port) {
+          replacement=http.createServer(requestHandler);
+          activePort=await bindService(replacement,body.port,bindHost,body.autoSelect);
+        }
+        db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('service',?)").run(JSON.stringify({port:body.port,autoSelect:body.autoSelect}));
+        configuredPort=body.port;autoSelectPort=body.autoSelect;
+        if(replacement){server=replacement;port=activePort;terminals=attachTerminals(server,{channels,run,holdDir,session:req=>auth.session(req)});}
+        res.once('finish',()=>{
+          for(const client of statusClients)client.res.end();statusClients.clear();
+          previousTerminals.close();
+          previous.close(async()=>{
+            if(!replacement){
+              try{port=await bindService(server,configuredPort,bindHost,autoSelectPort);terminals=attachTerminals(server,{channels,run,holdDir,session:req=>auth.session(req)});}
+              catch(error){console.error('服务重启失败:',error);}
+            }
+            console.log(`SSH Hold Deck: http://${bindHost}:${port}`);
+          });
+          previous.closeAllConnections();
+        });
+        return json(res,200,{port:configuredPort,activePort,autoSelect:autoSelectPort,restarting:true});
+      }catch(error){if(replacement?.listening)replacement.close();throw error;}
+      finally{restarting=false;}
+    }
     if (url.pathname === '/api/system/ssh-hold' && req.method === 'GET') return json(res, 200, await cliStatus());
     if (url.pathname === '/api/system/ssh-hold/install' && req.method === 'POST') {
       if (!validOrigin(req, true)) return json(res, 403, {error:'请求来源无效'});
@@ -334,8 +378,10 @@ const server = http.createServer(async (req, res) => {
     json(res, 404, { error: 'Not found' });
   } catch (e) { json(res, e.status || 400, { error: e.message, ...(e.hostKeyChallenge ? { hostKeyChallenge: e.hostKeyChallenge } : {}) }); }
   finally { if (operationName) { channelOperations.delete(operationName); publishChannels().catch(console.error); } }
-});
-const terminals = attachTerminals(server, {channels,run,holdDir, session: req => auth.session(req)});
-server.listen(port, bindHost, () => console.log(`SSH Hold Deck: http://${bindHost}:${port}`));
+};
+let server=http.createServer(requestHandler);
+let terminals = attachTerminals(server, {channels,run,holdDir, session: req => auth.session(req)});
+port=await bindService(server,configuredPort,bindHost,autoSelectPort);
+console.log(`SSH Hold Deck: http://${bindHost}:${port}`);
 setImmediate(() => refreshStatuses().catch(error => console.error('状态更新失败:', error.message)));
 scheduleRefresh();

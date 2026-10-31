@@ -23,7 +23,7 @@ export function attachTerminals(server, { channels, run, holdDir, session = () =
     tokens.set(token, {name, owner, expires:Date.now()+30000});
     return token;
   }
-  server.on('upgrade', (req, socket, head) => {
+  const upgrade = (req, socket, head) => {
     const url = new URL(req.url, 'http://localhost');
     const token = url.searchParams.get('token');
     const grant = tokens.get(token);
@@ -42,9 +42,16 @@ export function attachTerminals(server, { channels, run, holdDir, session = () =
       ws.on('error',()=>ws.close());
       ws.send(JSON.stringify({type:'ready'}));
     });
-  });
-  setInterval(()=>{for(const [token,grant]of tokens)if(grant.expires<Date.now())tokens.delete(token);},30000).unref();
+  };
+  server.on('upgrade',upgrade);
+  const tokenTimer=setInterval(()=>{for(const [token,grant]of tokens)if(grant.expires<Date.now())tokens.delete(token);},30000);tokenTimer.unref();
   function revokeInvalid() { for (const [ws, req] of clients) if (!session(req)) ws.close(1008, 'Session expired'); }
-  setInterval(revokeInvalid, 30000).unref();
-  return {issue, revokeInvalid};
+  const sessionTimer=setInterval(revokeInvalid,30000);sessionTimer.unref();
+  function close() {
+    clearInterval(tokenTimer);clearInterval(sessionTimer);tokens.clear();server.off('upgrade',upgrade);
+    for(const ws of clients.keys())ws.terminate();
+    for(const shell of sessions){try{shell.kill();}catch{}}
+    sessions.clear();clients.clear();wss.close();
+  }
+  return {issue, revokeInvalid, close};
 }
