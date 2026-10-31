@@ -5,8 +5,8 @@
   const dock=document.createElement('button');dock.className='terminal-dock';dock.hidden=true;dock.textContent=I18n.t('终端');document.body.append(dock);
   const sessions=new Map();let active;let counter=0;
   const terminalTheme=()=>document.documentElement.dataset.theme==='dark'
-    ? {background:'#182b30',foreground:'#d7e0ea',cursor:'#55d8b4',selectionBackground:'#28645c88',black:'#182433',brightBlack:'#8c9fb5',white:'#ccd6e2',brightWhite:'#f0f5fa'}
-    : {background:'#edf3f1',foreground:'#293b43',cursor:'#0b9284',selectionBackground:'#10b4a433',black:'#293b43',brightBlack:'#6b7d86',white:'#d5dfe3',brightWhite:'#edf3f5'};
+    ? {background:'#131317',foreground:'#d4d4d8',cursor:'#10b981',selectionBackground:'#10b98133',black:'#18181b',brightBlack:'#71717a',white:'#d4d4d8',brightWhite:'#f4f4f5'}
+    : {background:'#ffffff',foreground:'#27272a',cursor:'#059669',selectionBackground:'#05966926',black:'#18181b',brightBlack:'#71717a',white:'#d4d4d8',brightWhite:'#fafafa'};
   new MutationObserver(()=>{for(const session of sessions.values())session.term.options.theme=terminalTheme();}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
   const tabs=panel.querySelector('.terminal-tabs'),content=panel.querySelector('.terminal-content');
   lucide.createIcons();
@@ -23,7 +23,7 @@
   dock.onclick=()=>activate(active);
   new ResizeObserver(fit).observe(content);
   window.openTerminal=async name=>{
-    const id=++counter;const term=new Terminal({cursorBlink:true,fontSize:13,fontFamily:'Menlo, Monaco, monospace',scrollback:5000,theme:terminalTheme(),allowProposedApi:false});
+    const id=++counter;const term=new Terminal({cursorBlink:true,fontSize:13,fontFamily:'"SF Mono", "Fira Code", "JetBrains Mono", Menlo, Monaco, monospace',scrollback:5000,theme:terminalTheme(),allowProposedApi:false});
     const fitAddon=new FitAddon.FitAddon();term.loadAddon(fitAddon);
     const tab=document.createElement('div');tab.className='terminal-tab';const button=document.createElement('button');button.type='button';button.setAttribute('role','tab');button.innerHTML='<i data-lucide="terminal"></i>';const label=document.createElement('span');label.className='terminal-tab-label';label.textContent=`${name} · ${id}`;button.title=label.textContent;button.append(label);const exit=document.createElement('button');exit.type='button';exit.className='terminal-tab-close';exit.innerHTML='<i data-lucide="x"></i>';exit.title=I18n.t('关闭终端');exit.setAttribute('aria-label',I18n.t(`关闭 ${name} 终端`));tab.append(button,exit);tabs.append(tab);lucide.createIcons();
     const pane=document.createElement('div');pane.className='terminal-pane';content.append(pane);term.open(pane);const session={name,term,fit:fitAddon,tab,button,pane,ws:null};sessions.set(id,session);button.onclick=()=>activate(id);exit.onclick=()=>close(id);activate(id);term.writeln(I18n.t('\x1b[90m正在连接...\x1b[0m'));
