@@ -12,6 +12,6 @@ export function validOrigin(req, requireOrigin = false) {
     if (!allowed.has(url.hostname.replace(/^\[|\]$/g, '').toLowerCase())) return false;
     if (req.socket?.localPort && Number(url.port || 80) !== req.socket.localPort) return false;
     const origin = req.headers.origin;
-    return origin ? origin === url.origin : !requireOrigin;
+    return origin ? origin.toLowerCase() === url.origin.toLowerCase() : !requireOrigin;
   } catch { return false; }
 }
