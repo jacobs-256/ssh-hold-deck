@@ -39,6 +39,7 @@
   channelMenu.addEventListener('click', event => {
     const button = event.target.closest('button'); if (!button) return;
     const status = document.querySelector('#status'); status.value = button.dataset.status;
+    location.hash = '/channels' + (status.value ? '?status=' + encodeURIComponent(status.value) : '');
     status.dispatchEvent(new Event('change')); syncNavigation();
   });
   document.querySelector('#status').addEventListener('change', syncNavigation);
@@ -244,7 +245,7 @@
       if (open) channelMenu.querySelectorAll('button').forEach(button => {button.classList.remove('active');button.setAttribute('aria-pressed','false');});
       else syncNavigation();
     };
-    toggle.onclick = () => setPreferences(true);
+    toggle.onclick = () => { location.hash='/settings'; setPreferences(true); };
     channelMenu.addEventListener('click', () => setPreferences(false));
     toggle.removeAttribute('aria-haspopup'); toggle.removeAttribute('aria-expanded');
     lucide.createIcons();

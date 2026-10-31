@@ -52,7 +52,7 @@
   function show(){visible=true;page.hidden=false;document.querySelector('main>.workspace').hidden=true;document.querySelector('main>header').hidden=true;document.querySelector('.preferences-page').hidden=true;document.querySelector('.settings-toggle').classList.remove('active');document.querySelector('.settings-toggle').setAttribute('aria-current','false');navigation.classList.add('active');navigation.setAttribute('aria-current','page');update();detect();}
   function channels(filter='total') {document.querySelector(`.sidebar [data-status="${filter==='up'?'畅通':filter==='down'?'已断开':''}"]`).click();}
   window.addEventListener('leave-dashboard',hide);
-  navigation.onclick=show;check.onclick=()=>detect();install.onclick=()=>detect(true);
+  navigation.onclick=()=>{location.hash='/dashboard';show();};check.onclick=()=>detect();install.onclick=()=>detect(true);
   settingsBanner.querySelector('[data-cli=check]').onclick=()=>detect();
   settingsBanner.querySelector('[data-cli=install]').onclick=()=>detect(true);
   window.addEventListener('check-cli',()=>detect());
@@ -61,5 +61,18 @@
   page.querySelector('[data-shortcut=add]').onclick=()=>{channels();document.querySelector('#add').click();};
   list.onclick=event=>{const row=event.target.closest('[data-channel]');if(!row)return;channels();document.querySelector('#search').value=row.dataset.channel;document.querySelector('#search').dispatchEvent(new Event('input'));};
   new MutationObserver(update).observe(document.querySelector('.summary'),{childList:true,subtree:true,characterData:true});
-  show();
+  function applyRoute() {
+    const route=new URL(location.hash.slice(1)||'/dashboard',location.origin);
+    if(route.pathname==='/settings') document.querySelector('.settings-toggle').click();
+    else if(route.pathname==='/channels') {
+      const status=route.searchParams.get('status')||'';
+      const button=[...document.querySelectorAll('.sidebar [data-status]')].find(item=>item.dataset.status===status);
+      (button||document.querySelector('.sidebar [data-status=""]')).click();
+    } else {
+      if(location.hash!=='#/dashboard')history.replaceState(null,'','#/dashboard');
+      show();
+    }
+  }
+  window.addEventListener('hashchange',applyRoute);
+  applyRoute();
 })();
