@@ -203,6 +203,12 @@ html body.ui-aligned .inline-password input {margin-top:5px;width:100%;backgroun
 .inline-password .setting-feedback {flex:1;margin:0}
 .inline-password .setting-controls {margin-top:2px}
 .refresh-options {display:flex;gap:2px;padding:3px;background:var(--page);border:1px solid var(--line);border-radius:8px;flex-wrap:wrap}
+.text-size-options {display:flex;gap:2px;padding:3px;background:var(--page);border:1px solid var(--line);border-radius:8px;flex-wrap:wrap}
+html body.ui-aligned .text-size-options button {display:flex;align-items:center;justify-content:center;gap:7px;padding:7px 12px;min-height:34px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:13px;cursor:pointer;white-space:nowrap}
+html body.ui-aligned .text-size-options button:hover {background:var(--hover);color:var(--secondary)}
+html body.ui-aligned .text-size-options button[aria-pressed=true] {background:var(--surface-active);color:var(--text);font-weight:500}
+html:has(body.ui-aligned) {height:calc(100% / var(--app-scale,1))}
+html body.ui-aligned {width:calc(100vw / var(--app-scale,1));height:calc(100dvh / var(--app-scale,1))}
 html body.ui-aligned .refresh-options button {padding:7px 12px;min-height:34px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:13px;cursor:pointer;white-space:nowrap}
 html body.ui-aligned .refresh-options button:hover {color:var(--secondary);background:var(--hover)}
 html body.ui-aligned .refresh-options button[aria-pressed=true] {background:var(--surface-active);color:var(--text);font-weight:500}

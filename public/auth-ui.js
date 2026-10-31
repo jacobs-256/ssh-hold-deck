@@ -1,5 +1,14 @@
 (() => {
   document.body.classList.add('ui-aligned');
+  const textScales={small:0.9,default:1,large:1.1,xlarge:1.2};
+  let textSize='default';
+  try {const saved=localStorage.getItem('ssh-hold-text-size');if(Object.hasOwn(textScales,saved))textSize=saved;} catch {}
+  function applyTextSize(size) {
+    textSize=size;
+    document.documentElement.style.zoom=String(textScales[size]);
+    document.documentElement.style.setProperty('--app-scale',String(textScales[size]));
+  }
+  applyTextSize(textSize);
   const normalizeIcons = root => {
     for (const button of root.querySelectorAll('.close,.message-close')) {
       if (button.querySelector('svg,i')) continue;
@@ -164,6 +173,15 @@
     const preferences = document.createElement('section'); preferences.className = 'preferences-page'; preferences.hidden = true;
     preferences.innerHTML = I18n.html(`<div class="preferences-heading"><h1><i data-lucide="settings"></i>设置</h1></div><section class="preferences-section"><h2>外观</h2><div class="preference-row"><h3>主题</h3><div class="theme-options"></div></div><div class="preference-row"><h3>语言</h3><div class="locale-options"></div></div></section><section class="preferences-section"><h2>通道管理</h2><div class="preference-row"><h3>刷新设置</h3><button type="button" class="secondary" data-setting="refresh"><i data-lucide="timer"></i>刷新设置</button></div></section><section class="preferences-section"><h2>账户</h2><div class="preference-row"><h3>修改密码</h3><button type="button" class="secondary" data-setting="password"><i data-lucide="key-round"></i>修改密码</button></div><div class="preference-row"><h3>退出登录</h3><button type="button" class="secondary danger" data-setting="logout"><i data-lucide="log-out"></i>退出登录</button></div></section><div class="preferences-version">SSH Hold Deck <span>v0.1.0</span></div>`);
     document.querySelector('main').append(preferences);
+    const textRow=document.createElement('div');textRow.className='preference-row';
+    textRow.innerHTML=I18n.html(`<h3>文字大小</h3><div class="text-size-options" role="group" aria-label="文字大小">${[['small','小'],['default','默认'],['large','大'],['xlarge','特大']].map(([value,label],index)=>`<button type="button" data-text-size="${value}" aria-pressed="${textSize===value}"><i data-lucide="type" aria-hidden="true" style="width:${12+index*2}px;height:${12+index*2}px"></i><span>${label}</span></button>`).join('')}</div>`);
+    preferences.querySelector('.theme-options').closest('.preference-row').after(textRow);
+    textRow.addEventListener('click',event=>{
+      const button=event.target.closest('[data-text-size]');if(!button)return;
+      applyTextSize(button.dataset.textSize);
+      try {localStorage.setItem('ssh-hold-text-size',textSize);} catch {}
+      textRow.querySelectorAll('button').forEach(item=>item.setAttribute('aria-pressed',String(item.dataset.textSize===textSize)));
+    });
     for (const [source, target] of [[document.querySelector('.theme-control .language-menu'), '.theme-options'], [document.querySelector('.language-control>.language-menu'), '.locale-options']]) {
       if (!source) continue;
       for (const original of source.querySelectorAll('button')) {
@@ -185,6 +203,7 @@
       const detail = document.createElement('p'); detail.textContent = I18n.t(description); copy.append(detail);
     };
     describe('主题','选择应用的外观主题。');
+    describe('文字大小','调整应用的基础字号。');
     describe('语言','选择界面的显示语言。');
     describe('刷新设置','按所选频率自动更新通道状态，关闭后仍可手动刷新。');
     describe('修改密码','修改 Web 管理台的登录密码。');
