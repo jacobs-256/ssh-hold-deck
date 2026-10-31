@@ -258,6 +258,8 @@
     const serviceSection=document.createElement('section');serviceSection.className='preferences-section';
     serviceSection.innerHTML=I18n.html('<h2>服务配置</h2><div class="settings-group"><div class="preference-row"><div class="setting-copy"><h3>服务端口</h3><p>检测端口占用情况，保存后自动重启 Web 服务并跳转到新地址。Web 终端会断开，SSH 保活通道不受影响。</p><p class="service-active"></p></div><form class="service-port-form"><div class="setting-controls"><input name="port" type="number" min="1024" max="65535" required aria-label="服务端口"><button type="button" class="secondary" data-service="check">检测</button><button type="submit" class="secondary">保存</button></div><p class="setting-feedback" role="status"></p></form></div><div class="preference-row"><div class="setting-copy"><h3>自动选择可用端口</h3><p>配置端口被占用时，自动选择其他可用端口；与端口配置一起保存。</p></div><label class="service-switch"><input type="checkbox" name="autoSelect" role="switch" aria-label="自动选择可用端口"><span aria-hidden="true"></span></label></div></div>');
     preferences.querySelector('.preferences-version').before(serviceSection);
+    const agentSkillsSettings = document.createElement('div'); agentSkillsSettings.className = 'agent-skills-settings';
+    serviceSection.append(agentSkillsSettings);
     const refreshRow=inlineRefresh.closest('.preference-row');
     const channelSection=refreshRow.closest('.preferences-section');
     serviceSection.querySelector('.settings-group').append(refreshRow);
@@ -308,7 +310,7 @@
     const setPreferences = open => {
       window.dispatchEvent(new Event('leave-dashboard'));
       preferences.hidden = !open; document.querySelector('main>.workspace').hidden = open; document.querySelector('main>header').hidden = open;
-      if(open){loadRefresh();loadService();window.dispatchEvent(new Event('check-cli'));}
+      if(open){loadRefresh();loadService();window.dispatchEvent(new Event('check-cli'));window.dispatchEvent(new Event('check-agent-skills'));}
       else inlinePassword.reset();
       toggle.classList.toggle('active', open); toggle.setAttribute('aria-current', open ? 'page' : 'false');
       if (open) channelMenu.querySelectorAll('button').forEach(button => {button.classList.remove('active');button.setAttribute('aria-pressed','false');});

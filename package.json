@@ -14,9 +14,12 @@
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
+    "dompurify": "^3.4.17",
     "lucide": "^1.64.0",
+    "marked": "^18.1.2",
     "node-pty": "^1.1.0",
-    "ws": "^8.22.0"
+    "ws": "^8.22.0",
+    "yaml": "^2.9.1"
   },
   "allowScripts": {
     "node-pty@1.1.0": true

@@ -1,4 +1,5 @@
 import { connectionAvailability } from './connection-config.js';
+import { createAgentSkills } from './agent-skills.js';
 import { jumpOptions } from './jump.js';
 import { JumpServerClient, normalizeServer, publicServer } from './jumpserver.js';
 import { attachTerminals } from './terminal-server.js';
@@ -187,6 +188,7 @@ async function storeIdentity(body) {
   delete body.identityContent;
 }
 
+const agentSkills = createAgentSkills();
 const requestHandler = async (req, res) => {
   let operationName;
   try {
@@ -238,6 +240,13 @@ const requestHandler = async (req, res) => {
         return json(res,200,{port:configuredPort,activePort,autoSelect:autoSelectPort,restarting:true});
       }catch(error){if(replacement?.listening)replacement.close();throw error;}
       finally{restarting=false;}
+    }
+    if (url.pathname === '/api/system/agent-skills' && req.method === 'GET') return json(res, 200, await agentSkills.list());
+    const agentSkillMatch = url.pathname.match(/^\/api\/system\/agent-skills\/([a-z-]+)$/);
+    if (agentSkillMatch && ['POST', 'DELETE'].includes(req.method)) {
+      if (!validOrigin(req, true)) return json(res, 403, { error: '请求来源无效' });
+      const body = await readBody(req);
+      return json(res, 200, await agentSkills.change(agentSkillMatch[1], req.method === 'POST', { confirmed: body.confirmed === true }));
     }
     if (url.pathname === '/api/system/ssh-hold' && req.method === 'GET') return json(res, 200, await cliStatus());
     if (url.pathname === '/api/system/ssh-hold/install' && req.method === 'POST') {
@@ -316,6 +325,8 @@ const requestHandler = async (req, res) => {
       '/vendor/xterm.css':['@xterm/xterm/css/xterm.css','text/css'],
       '/vendor/fit.js':['@xterm/addon-fit/lib/addon-fit.js','text/javascript'],
       '/vendor/lucide.js':['lucide/dist/umd/lucide.js','text/javascript'],
+      '/vendor/marked.js':['marked/lib/marked.umd.js','text/javascript'],
+      '/vendor/purify.js':['dompurify/dist/purify.min.js','text/javascript'],
       '/terminal.js':['../public/terminal.js','text/javascript']
     };
     if(vendorFiles[url.pathname]){const [file,type]=vendorFiles[url.pathname];res.writeHead(200,{'content-type':type});return res.end(await readFile(path.join(root,'node_modules',file)));}

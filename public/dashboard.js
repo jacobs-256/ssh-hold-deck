@@ -8,6 +8,110 @@
   const nav=document.createElement('nav');nav.className='dashboard-navigation';nav.append(navigation);document.querySelector('.logo').after(nav);
   const list=document.querySelector('.recent-channels');
   const escape = value => String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  const recent = page.querySelector('.dashboard-recent');
+  const columns = document.createElement('div'); columns.className = 'dashboard-columns';
+  recent.before(columns);
+  const skill = document.createElement('section'); skill.className = 'dashboard-skill';
+  skill.innerHTML = `<div class="skill-heading"><h2>${t('ssh-hold 技能文档')}</h2></div><article class="skill-preview" tabindex="0" aria-label="${t('ssh-hold 技能文档')}" aria-busy="true"><p role="status">${t('正在加载文档…')}</p></article>`;
+  columns.append(skill, recent);
+  const preview = skill.querySelector('.skill-preview');
+  const skillActions = document.createElement('div'); skillActions.className = 'skill-actions';
+  skill.querySelector('.skill-heading').append(skillActions);
+  const agentsBar = document.createElement('div'); agentsBar.className = 'skill-agents';
+  agentsBar.setAttribute('role', 'group'); agentsBar.setAttribute('aria-label', t('AI Agent 技能管理'));
+  skillActions.append(agentsBar);
+  const agentStatus = document.createElement('p'); agentStatus.className = 'skill-agent-status';
+  agentStatus.setAttribute('role', 'status'); skill.querySelector('.skill-heading').after(agentStatus);
+  const agentSettings = document.querySelector('.agent-skills-settings');
+  agentSettings.innerHTML = `<h3>${t('AI Agent 技能管理')}</h3><p class="skill-agent-status" role="status">${t('正在检测 AI Agent…')}</p><div class="agent-settings-grid"></div>`;
+  const settingsGrid = agentSettings.querySelector('.agent-settings-grid');
+  const settingsStatus = agentSettings.querySelector('[role=status]');
+  let agents = [], agentOperation = false, detectingAgents = false;
+  function renderAgents() {
+    agentsBar.innerHTML = agents.map(agent => {
+      const action = agent.skillInstalled ? t('卸载 ssh-hold skill') : t('安装 ssh-hold skill');
+      const label = `${agent.name} · ${agent.error ? t('检测失败，请重试') : action}`;
+      return `<button type="button" class="skill-agent ${agent.skillInstalled ? 'is-installed' : ''}" data-agent="${escape(agent.id)}" aria-label="${escape(label)}" title="${escape(label)}" aria-pressed="${Boolean(agent.skillInstalled)}" ${agentOperation || agent.error ? 'disabled' : ''}><img src="/assets/agents/${escape(agent.id)}.svg" width="18" height="18" alt=""><span class="agent-tooltip" role="tooltip">${escape(label)}</span></button>`;
+    }).join('');
+    settingsGrid.innerHTML = agents.map(agent => {
+      const paths = agent.paths?.length ? agent.paths : agent.installPath ? [agent.installPath] : [];
+      const label = `${agent.name} · ssh-hold skill`;
+      return `<article class="agent-setting-card" data-agent-card="${escape(agent.id)}"><div class="agent-card-heading"><img src="/assets/agents/${escape(agent.id)}.svg" width="24" height="24" alt=""><h4>${escape(agent.name)}</h4><label class="service-switch"><input type="checkbox" role="switch" data-agent-switch="${escape(agent.id)}" aria-label="${escape(label)}" ${agent.skillInstalled ? 'checked' : ''} ${agentOperation || agent.error ? 'disabled' : ''}><span aria-hidden="true"></span></label></div><p class="agent-path-label">${t(agent.error ? '检测失败，请重试' : agent.skillInstalled ? '安装路径' : '待安装路径')}</p>${paths.map(file => `<code class="agent-install-path">${escape(file.replace(/[\\/]$/, '') + '/SKILL.md')}</code>`).join('')}</article>`;
+    }).join('');
+  }
+  async function detectAgents() {
+    if (detectingAgents || agentOperation) return;
+    detectingAgents = true; agentsBar.setAttribute('aria-busy', 'true');
+    settingsGrid.setAttribute('aria-busy', 'true');
+    try {
+      const result = await request('/api/system/agent-skills');
+      if (agentOperation) return;
+      agents = result.agents; renderAgents(); agentStatus.textContent = '';
+      settingsStatus.textContent = agents.length ? '' : t('未检测到 AI Agent');
+    } catch {
+      if (agentOperation) return;
+      for (const status of [agentStatus, settingsStatus]) {
+        status.textContent = t('AI Agent 检测失败');
+        const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = t('重试');
+        retry.onclick = detectAgents; status.append(' ', retry);
+      }
+    } finally { detectingAgents = false; agentsBar.setAttribute('aria-busy', 'false'); settingsGrid.setAttribute('aria-busy', 'false'); }
+  }
+  async function toggleAgent(id, fromSettings = false) {
+    if (agentOperation) return;
+    const agent = agents.find(item => item.id === id); if (!agent || agent.error) return;
+    agentOperation = true;
+    try {
+      if (agent.skillInstalled) {
+        const affected = agents.filter(other => other.id !== agent.id && other.paths?.some(file => agent.paths.includes(file)));
+        let message = `${t('确认卸载以下 AI Agent 的 ssh-hold skill：')} ${agent.name}？`;
+        if (affected.length) message += `\n${t('共享目录也会影响：')} ${affected.map(item => item.name).join(', ')}`;
+        if (!await showMessage(message, true)) return;
+      }
+      renderAgents(); agentsBar.setAttribute('aria-busy', 'true');
+      settingsGrid.setAttribute('aria-busy', 'true');
+      agentStatus.textContent = '';
+      const response = await fetch(`/api/system/agent-skills/${agent.id}`, {
+        method: agent.skillInstalled ? 'DELETE' : 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ confirmed: agent.skillInstalled }),
+      });
+      const result = await response.json(); if (!response.ok) throw new Error(result.error || t('请求失败'));
+      agents = result.agents;
+      settingsStatus.textContent = '';
+    } catch (error) { await showMessage(error.message); }
+    finally {
+      agentOperation = false; agentsBar.setAttribute('aria-busy', 'false'); settingsGrid.setAttribute('aria-busy', 'false'); renderAgents();
+      (fromSettings ? settingsGrid.querySelector(`[data-agent-switch="${agent.id}"]`) : agentsBar.querySelector(`[data-agent="${agent.id}"]`))?.focus();
+    }
+  }
+  agentsBar.onclick = event => {
+    const button = event.target.closest('[data-agent]'); if (button) toggleAgent(button.dataset.agent);
+  };
+  settingsGrid.onchange = event => {
+    const input = event.target.closest('[data-agent-switch]'); if (!input) return;
+    const agent = agents.find(item => item.id === input.dataset.agentSwitch);
+    input.checked = Boolean(agent?.skillInstalled);
+    toggleAgent(input.dataset.agentSwitch, true);
+  };
+  window.addEventListener('check-agent-skills', detectAgents);
+  window.addEventListener('focus', () => { if (!page.hidden || !document.querySelector('.preferences-page').hidden) detectAgents(); });
+  async function loadSkill() {
+    preview.setAttribute('aria-busy', 'true');
+    try {
+      await Promise.all(['/vendor/marked.js', '/vendor/purify.js'].map(src => new Promise((resolve, reject) => {
+        const script = document.createElement('script'); script.src = src;
+        script.onload = resolve; script.onerror = reject; document.head.append(script);
+      })));
+      const response = await fetch('/assets/ssh-hold-skill.md');
+      if (!response.ok) throw new Error('Document load failed');
+      preview.innerHTML = DOMPurify.sanitize(marked.parse(await response.text()), { USE_PROFILES: { html: true } });
+      preview.querySelectorAll('a').forEach(link => { link.target = '_blank'; link.rel = 'noopener noreferrer'; });
+    } catch {
+      preview.innerHTML = `<p role="alert">${t('文档加载失败')}</p><button type="button" class="secondary">${t('重试')}</button>`;
+      preview.querySelector('button').onclick = loadSkill;
+    } finally { preview.setAttribute('aria-busy', 'false'); }
+  }
+  loadSkill();
   let visible=false, busy=false;
   function update() {
     for(const key of ['total','up','down'])page.querySelector(`[data-stat=${key}]`).textContent=document.getElementById(key).textContent;
@@ -49,7 +153,7 @@
     finally {busy=false;install.disabled=false;check.disabled=false;syncBanners();lucide.createIcons();}
   }
   function hide(){visible=false;page.hidden=true;navigation.classList.remove('active');navigation.setAttribute('aria-current','false');}
-  function show(){visible=true;page.hidden=false;document.querySelector('main>.workspace').hidden=true;document.querySelector('main>header').hidden=true;document.querySelector('.preferences-page').hidden=true;document.querySelector('.settings-toggle').classList.remove('active');document.querySelector('.settings-toggle').setAttribute('aria-current','false');navigation.classList.add('active');navigation.setAttribute('aria-current','page');update();detect();}
+  function show(){visible=true;page.hidden=false;document.querySelector('main>.workspace').hidden=true;document.querySelector('main>header').hidden=true;document.querySelector('.preferences-page').hidden=true;document.querySelector('.settings-toggle').classList.remove('active');document.querySelector('.settings-toggle').setAttribute('aria-current','false');navigation.classList.add('active');navigation.setAttribute('aria-current','page');update();detect();detectAgents();}
   function channels(filter='total') {document.querySelector(`.sidebar [data-status="${filter==='up'?'畅通':filter==='down'?'已断开':''}"]`).click();}
   window.addEventListener('leave-dashboard',hide);
   navigation.onclick=()=>{location.hash='/dashboard';show();};check.onclick=()=>detect();install.onclick=()=>detect(true);
