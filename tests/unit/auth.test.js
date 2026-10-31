@@ -39,10 +39,11 @@ test('login, password changes, logout and expiry revoke sessions correctly', asy
     const firstReq = req(first['Set-Cookie'].split(';')[0]);
     const second = response(); await auth.login(req(), second, { password: initial.password });
     const secondReq = req(second['Set-Cookie'].split(';')[0]);
-    await assert.rejects(auth.change(secondReq, response(), { currentPassword: 'wrong', password: 'replacement-password', confirmPassword: 'replacement-password' }), /原密码/);
+    await assert.rejects(auth.change(req(), response(), { password: 'replacement-password' }), e => e.status === 401);
+    await assert.rejects(auth.change(secondReq, response(), { password: 'short' }));
     assert.ok(auth.session(firstReq));
     const changed = response();
-    await auth.change(secondReq, changed, { currentPassword: initial.password, password: 'replacement-password', confirmPassword: 'replacement-password' });
+    await auth.change(secondReq, changed, { password: 'replacement-password' });
     assert.equal(auth.session(firstReq), null); assert.equal(auth.session(secondReq), null);
     const changedReq = req(changed['Set-Cookie'].split(';')[0]); assert.ok(auth.session(changedReq));
     await assert.rejects(auth.login(req(), response(), { password: initial.password }), /密码错误/);

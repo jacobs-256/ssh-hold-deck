@@ -77,12 +77,11 @@ export function createAuth(db, { now = Date.now } = {}) {
       if (previous) db.prepare('DELETE FROM web_sessions WHERE token_hash=?').run(previous);
       issue(res);
     },
-    async change(req, res, { currentPassword, password, confirmPassword }) {
+    async change(req, res, { password }) {
       if (!session(req)) invalid('请先登录', 401);
-      validatePassword(password, confirmPassword);
+      validatePassword(password, password);
       rateLimit(req);
       const record = credential();
-      if (!await verify(currentPassword, record)) invalid('原密码错误');
       const replacement = await hashPassword(password);
       if (!session(req) || credential().hash !== record.hash) invalid('登录状态已失效，请重新登录', 401);
       db.exec('BEGIN IMMEDIATE');
