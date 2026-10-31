@@ -323,7 +323,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/' || url.pathname === '/index.html') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(await readFile(path.join(root, 'public', 'index.html'))); }
     if (['/app.js', '/jumpserver-ui.js', '/auth-ui.js', '/i18n.js'].includes(url.pathname)) { res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8' }); return res.end(await readFile(path.join(root, 'public', url.pathname.slice(1)))); }
-    if (url.pathname.startsWith('/assets/')) { const file = path.join(root, 'public', url.pathname); if (!existsSync(file)) return json(res, 404, { error: 'Not found' }); res.writeHead(200, { 'content-type': 'text/css' }); return res.end(await readFile(file)); }
+    if (url.pathname.startsWith('/assets/')) { const file = path.join(root, 'public', url.pathname); if (!existsSync(file)) return json(res, 404, { error: 'Not found' }); const type = { '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' }[path.extname(file)] || 'application/octet-stream'; res.writeHead(200, { 'content-type': type }); return res.end(await readFile(file)); }
     json(res, 404, { error: 'Not found' });
   } catch (e) { json(res, e.status || 400, { error: e.message, ...(e.hostKeyChallenge ? { hostKeyChallenge: e.hostKeyChallenge } : {}) }); }
   finally { if (operationName) { channelOperations.delete(operationName); publishChannels().catch(console.error); } }

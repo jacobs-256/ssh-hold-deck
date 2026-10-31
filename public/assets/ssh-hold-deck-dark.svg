@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <title>SSH Hold Deck</title>
+  <rect x="1" y="1" width="62" height="62" rx="14" fill="#14252A" stroke="#355259" stroke-width="2"/>
+  <path d="M25 15H21C17.686 15 15 17.686 15 21V43C15 46.314 17.686 49 21 49H25" stroke="#38E5B0" stroke-width="4" stroke-linecap="round"/>
+  <path d="M39 15H43C46.314 15 49 17.686 49 21V43C49 46.314 46.314 49 43 49H39" stroke="#63D8FF" stroke-width="4" stroke-linecap="round"/>
+  <path d="M23 26L29 32L23 38M35 38H41" stroke="#EAFBFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="32" cy="15" r="2.5" fill="#63D8FF"/>
+  <circle cx="32" cy="49" r="2.5" fill="#38E5B0"/>
+</svg>

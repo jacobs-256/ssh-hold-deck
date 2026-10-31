@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512" fill="none">
+  <title>SSH Hold Deck</title>
+  <desc>A terminal prompt held inside a continuous SSH connection loop.</desc>
+  <defs>
+    <linearGradient id="surface" x1="64" y1="40" x2="448" y2="488" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#17272E"/>
+      <stop offset="1" stop-color="#081116"/>
+    </linearGradient>
+    <linearGradient id="signal" x1="112" y1="360" x2="400" y2="152" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38E5B0"/>
+      <stop offset="1" stop-color="#63D8FF"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#surface)"/>
+  <rect x="17" y="17" width="478" height="478" rx="107" stroke="#32454D" stroke-width="2"/>
+  <path d="M204 122H166C138.386 122 116 144.386 116 172V340C116 367.614 138.386 390 166 390H204M308 122H346C373.614 122 396 144.386 396 172V340C396 367.614 373.614 390 346 390H308" stroke="url(#signal)" stroke-width="24" stroke-linecap="round"/>
+  <path d="M181 211L227 256L181 301" stroke="#EAFBFF" stroke-width="23" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M267 301H329" stroke="#EAFBFF" stroke-width="23" stroke-linecap="round"/>
+  <path d="M226 122H286M226 390H286" stroke="#38545E" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="256" cy="122" r="12" fill="#65DBF4"/>
+  <circle cx="256" cy="390" r="12" fill="#3FE7B6"/>
+</svg>

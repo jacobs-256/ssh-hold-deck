@@ -199,8 +199,10 @@
   picker.append(themePicker);
   const themeToggle = themePicker.querySelector('.language-toggle');
   const themeMenu = themePicker.querySelector('.language-menu');
+  const favicon = document.querySelector('#app-favicon');
   function applyTheme() {
     document.documentElement.dataset.theme = themePreference === 'auto' ? (systemTheme.matches ? 'dark' : 'light') : themePreference;
+    if (favicon) favicon.href = `/assets/ssh-hold-deck-${document.documentElement.dataset.theme}-64.png`;
     for (const option of themeMenu.querySelectorAll('button')) option.setAttribute('aria-checked', String(option.dataset.theme === themePreference));
   }
   function closeThemeMenu() { themeMenu.hidden = true; themeToggle.setAttribute('aria-expanded', 'false'); }
