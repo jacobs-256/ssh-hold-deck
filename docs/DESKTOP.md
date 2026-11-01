@@ -142,6 +142,14 @@ also use this test mode. To create a Developer ID build, manually run the workfl
 from `main` and enable **apple_signing**. Empty Apple variables are removed before
 invoking Tauri because an empty `APPLE_CERTIFICATE` can still trigger import.
 Provide the complete credential set; signing/notarization errors fail the build.
+For Developer ID builds, the workflow signs every embedded Mach-O binary before
+Tauri bundles and notarizes the app, including Node and all node-pty `.node`
+modules and extensionless `spawn-helper` binaries across bundled architectures.
+Each signature requires the configured team, a secure timestamp and hardened
+runtime. Node receives the project's runtime entitlements. The runtime manifest
+hash is refreshed after signing, then SQLite, PTY and service smoke checks run
+again. Signing only the outer application does not cover these resource binaries
+and causes Apple notarization to reject the archive.
 `APPLE_CERTIFICATE` must contain the Base64-encoded contents of a `.p12` exported
 from Keychain Access with its matching private key. A `.cer` download, file path,
 certificate name or PEM text is not the required value. On your Mac, copy the
