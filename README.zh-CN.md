@@ -18,6 +18,10 @@
 
 ## 环境要求
 
+macOS 桌面应用、Windows/WSL2 安装包及 GitHub Release 自动打包见
+[桌面构建与发布说明](docs/DESKTOP.md)。Windows 使用已初始化的 WSL2 发行版运行
+SSH 后端，不依赖原生 Windows 执行 ssh-hold。
+
 - Node.js **22.13.0 或更高版本**，包含内置 `node:sqlite`。
 - npm、OpenSSH 客户端，以及 PATH 中可执行的 `ssh-hold`。
 - 当前开发环境为 macOS；Linux 尚未完整验证，原生 Windows 不在当前支持范围。

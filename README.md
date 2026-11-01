@@ -18,6 +18,11 @@ A Node.js web management layer built on top of the open-source [ssh-hold](https:
 
 ## Requirements
 
+For the macOS desktop application and Windows/WSL2 installer build, see
+[Desktop Builds](docs/DESKTOP.md). GitHub Release publication triggers the desktop
+build workflow. Native Windows SSH execution is not used; the Windows backend
+runs inside an initialized WSL2 distribution.
+
 - Node.js **22.13.0 or later**, including built-in `node:sqlite`.
 - npm, an OpenSSH client, and an executable `ssh-hold` on PATH.
 - Development currently targets macOS. Linux has not been fully verified; native Windows is outside the current support scope.

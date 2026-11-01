@@ -1,0 +1,28 @@
+name: Desktop Checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  backend:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.22.0'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run desktop:prepare
+      - run: npm run desktop:verify
+      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
+        if: runner.os == 'macOS'
+      - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
+        if: runner.os == 'macOS'

@@ -1,5 +1,7 @@
 # Public Release Checklist / 开源发布检查
 
+Desktop installers and GitHub Release automation are planned in [DESKTOP-PACKAGING.md](DESKTOP-PACKAGING.md). / 桌面安装包与 GitHub Release 自动打包方案见该文档。
+
 1. Choose a license and add `LICENSE`. Public visibility alone does not make the project open source. / 选择许可证并添加 LICENSE，公开仓库不等同于授予开源许可。
 2. Verify the prerequisite links to https://github.com/CherryLover/ssh-hold and compatibility with the upstream CLI. Keep upstream attribution and distinguish this companion project's license from upstream licensing. / 验证上游安装链接与 CLI 兼容性，保留致谢并区分两个项目的许可证。
 3. Keep `README.md` as the default English entry and `README.zh-CN.md` as the Chinese translation. Relative language links work directly on GitHub. / 保留英文默认入口和中文翻译，顶部相对链接可直接切换。

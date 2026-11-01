@@ -1,0 +1,160 @@
+name: Desktop Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag (for example v0.2.0)
+        required: true
+        type: string
+      upload_to_release:
+        description: Upload installers to the existing release
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+  NODE_VERSION: '24.22.0'
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: node scripts/check-release-version.mjs
+      - run: npm ci
+      - run: npm test
+
+  wsl-backend:
+    needs: validate
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run desktop:prepare
+      - run: npm run desktop:verify
+      - run: tar -czf wsl-backend.tar.gz -C desktop backend
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wsl-backend
+          path: wsl-backend.tar.gz
+          retention-days: 7
+
+  build:
+    needs: [validate, wsl-backend]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            label: macos-arm64
+            bundles: app,dmg
+          - runner: macos-15-intel
+            label: macos-x64
+            bundles: app,dmg
+          - runner: windows-latest
+            label: windows-x64
+            bundles: nsis
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
+      - uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          workspaces: src-tauri
+          save-if: false
+      - run: npm ci
+      - name: Prepare native macOS backend
+        if: runner.os == 'macOS'
+        run: npm run desktop:prepare
+      - name: Verify native macOS backend
+        if: runner.os == 'macOS'
+        run: npm run desktop:verify
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        if: runner.os == 'Windows'
+        with:
+          name: wsl-backend
+      - name: Extract WSL backend
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          tar -xzf wsl-backend.tar.gz -C desktop
+          cp build/icons/default/icon.png desktop/loading/icon.png
+      - name: Build desktop installer
+        env:
+          # With no credentials this produces unsigned test installers.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run desktop:build -- --bundles ${{ matrix.bundles }} -- --locked
+      - name: Verify macOS application identity and signature
+        if: runner.os == 'macOS'
+        run: node scripts/verify-macos-bundle.mjs
+      - name: Collect installer and checksum
+        run: node scripts/collect-desktop.mjs ${{ matrix.label }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: desktop-${{ matrix.label }}
+          path: dist-desktop/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: build
+    if: github.event_name == 'release' || inputs.upload_to_release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: installers
+      - name: Verify and upload all installers
+        working-directory: installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test "$(find . -maxdepth 1 -name '*.dmg' | wc -l)" -eq 2
+          test "$(find . -maxdepth 1 -name '*.exe' | wc -l)" -eq 1
+          cat ./*.sha256 > SHA256SUMS.txt
+          sha256sum --check SHA256SUMS.txt
+          gh release view "$RELEASE_TAG" --repo "$REPOSITORY"
+          gh release upload "$RELEASE_TAG" ./*.dmg ./*.exe SHA256SUMS.txt --repo "$REPOSITORY" --clobber
