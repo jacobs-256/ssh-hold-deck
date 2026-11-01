@@ -131,6 +131,10 @@ claim publicly trusted signing or application auto-updates.
 For macOS Developer ID signing/notarization, configure Tauri-supported repository
 Secrets: `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`,
 `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`.
+The build job binds to the GitHub environment named `release`, so these secrets
+can also be stored under Settings > Environments > release > Environment secrets.
+Environment secrets override repository secrets with the same names. Any approval
+or branch/tag restrictions on that environment apply before build jobs start.
 Manual runs default to `apple_signing: false`: the build process removes all
 Apple credential environment variables and explicitly uses an ad-hoc signature,
 even if signing secrets exist in the repository. Tag pushes and Release events
