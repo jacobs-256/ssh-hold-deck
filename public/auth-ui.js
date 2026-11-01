@@ -274,6 +274,36 @@
       toastTimer=setTimeout(()=>{serviceToast.hidden=true;},4500);
     }
     let serviceBusy=false;
+    if (window.__TAURI__?.core?.invoke) {
+      const invoke = window.__TAURI__.core.invoke;
+      const desktopRows = document.createElement('div');
+      desktopRows.style.display = 'contents';
+      desktopRows.innerHTML = I18n.html('<div class="preference-row"><div class="setting-copy"><h3>关闭行为</h3><p>选择点击窗口关闭按钮后的应用行为。</p></div><div class="desktop-close-options theme-options" role="group" aria-label="关闭行为"><button type="button" class="secondary" data-close="ask">每次询问</button><button type="button" class="secondary" data-close="tray">最小化到托盘</button><button type="button" class="secondary" data-close="quit">退出应用</button></div></div><div class="preference-row"><div class="setting-copy"><h3>托盘图标</h3><p>在系统托盘中显示图标，便于快速执行显示和退出操作。</p></div><label class="service-switch"><input type="checkbox" role="switch" aria-label="托盘图标"><span aria-hidden="true"></span></label></div>');
+      const trayToggle = desktopRows.querySelector('input');
+      let desktopSettings;
+      const syncDesktop = () => {
+        trayToggle.checked = desktopSettings.trayEnabled;
+        desktopRows.querySelectorAll('[data-close]').forEach(button => {
+          button.setAttribute('aria-pressed', String(button.dataset.close === desktopSettings.closeBehavior));
+          button.disabled = button.dataset.close === 'tray' && !desktopSettings.trayEnabled;
+        });
+      };
+      const saveDesktop = async settings => {
+        desktopRows.querySelectorAll('button,input').forEach(control => { control.disabled = true; });
+        try { desktopSettings = await invoke('desktop_settings', { settings }); }
+        catch (error) { notifyService(String(error), true); }
+        finally { trayToggle.disabled = false; syncDesktop(); }
+      };
+      desktopRows.addEventListener('click', event => {
+        const button = event.target.closest('[data-close]');
+        if (button) saveDesktop({ ...desktopSettings, closeBehavior: button.dataset.close });
+      });
+      trayToggle.onchange = () => saveDesktop({ ...desktopSettings, trayEnabled: trayToggle.checked,
+        closeBehavior: !trayToggle.checked && desktopSettings.closeBehavior === 'tray' ? 'ask' : desktopSettings.closeBehavior });
+      invoke('desktop_settings', { settings: null }).then(settings => {
+        desktopSettings = settings; syncDesktop(); serviceSection.querySelector('.settings-group').append(desktopRows);
+      }).catch(error => notifyService(String(error), true));
+    }
     const lockService=locked=>{serviceBusy=locked;serviceForm.querySelectorAll('input,button').forEach(item=>item.disabled=locked);autoPort.disabled=locked;};
     async function loadService() {
       if(serviceBusy)return;lockService(true);

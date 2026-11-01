@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "SSH Hold Deck",
+  "version": "0.2.0",
+  "identifier": "com.jacobs256.sshholddeck",
+  "build": {
+    "frontendDist": "../desktop/loading",
+    "beforeDevCommand": "npm run desktop:prepare",
+    "beforeBuildCommand": "node scripts/check-desktop-resources.mjs"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": { "capabilities": ["desktop-settings"], "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'" }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "nsis"],
+    "icon": ["../build/icons/default/icon.icns", "../build/icons/default/icon.ico", "../build/icons/default/icon.png"],
+    "resources": { "../desktop/backend/": "backend/", "../desktop/start-wsl.sh": "start-wsl.sh" },
+    "macOS": { "minimumSystemVersion": "12.0", "infoPlist": "Info.plist", "signingIdentity": "-", "entitlements": "Entitlements.plist" },
+    "windows": { "nsis": { "installMode": "currentUser" } }
+  }
+}

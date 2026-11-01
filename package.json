@@ -6,7 +6,12 @@
   "scripts": {
     "start": "node src/server.js",
     "test": "node --test tests/unit/*.test.js tests/integration/*.test.js && node tests/integration/verify-sqlite.mjs",
-    "postinstall": "node scripts/setup-pty.js"
+    "postinstall": "node scripts/setup-pty.js",
+    "desktop:prepare": "node scripts/prepare-desktop.mjs",
+    "desktop:verify": "node scripts/verify-desktop.mjs",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build",
+    "release:prepare": "node scripts/prepare-release.mjs"
   },
   "engines": {
     "node": ">=22.13.0"
@@ -23,5 +28,8 @@
   },
   "allowScripts": {
     "node-pty@1.1.0": true
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4"
   }
 }

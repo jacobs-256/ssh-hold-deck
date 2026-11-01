@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>SSH Hold Deck needs local network access to connect to your SSH servers and jump hosts. SSH Hold Deck 需要访问本地网络，以连接您的 SSH 服务器和跳板机。</string>
+</dict>
+</plist>

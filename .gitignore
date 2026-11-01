@@ -10,3 +10,7 @@ node_modules/
 *.pem
 *.key
 .web-vault
+desktop/backend/
+src-tauri/target/
+src-tauri/gen/
+dist-desktop/

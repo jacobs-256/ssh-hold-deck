@@ -20,7 +20,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let port;
-const bindHost = process.env.HOST || '0.0.0.0';
+const desktop = process.env.SSH_HOLD_DESKTOP === '1';
+const bindHost = desktop ? '127.0.0.1' : process.env.HOST || '0.0.0.0';
 const holdDir = process.env.SSH_HOLD_DIR || path.join(os.homedir(), '.ssh', 'hold');
 const vaultFile = path.join(holdDir, '.web-vault');
 const vaultKey = crypto.createHash('sha256').update(`${os.userInfo().username}:${os.hostname()}:ssh-hold-web-v1`).digest();
@@ -40,8 +41,8 @@ await chmod(dbFile, 0o600);
 db.exec('CREATE TABLE IF NOT EXISTS channels (name TEXT PRIMARY KEY, config TEXT NOT NULL); CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
 db.exec('CREATE TABLE IF NOT EXISTS channel_status (name TEXT PRIMARY KEY, snapshot TEXT NOT NULL)');
 const savedService=JSON.parse(db.prepare("SELECT value FROM settings WHERE key='service'").get()?.value||'{}');
-let configuredPort=Number(process.env.PORT||savedService.port||8787);
-let autoSelectPort=savedService.autoSelect===true;
+let configuredPort=Number(process.env.PORT || savedService.port || (desktop ? 0 : 8787));
+let autoSelectPort=desktop || savedService.autoSelect===true;
 let restarting=false;
 const auth = createAuth(db);
 async function loadVault() { return Object.fromEntries(db.prepare('SELECT name, config FROM channels').all().map(row => [row.name, decrypt(row.config)])); }
@@ -188,7 +189,13 @@ async function storeIdentity(body) {
   delete body.identityContent;
 }
 
-const agentSkills = createAgentSkills();
+const agentSkills = process.env.SSH_HOLD_WINDOWS_HOME ? createAgentSkills({
+  home: process.env.SSH_HOLD_WINDOWS_HOME,
+  env: { PATH: '' }, platform: 'win32', applications: [],
+}) : createAgentSkills();
+function reportDesktopReady() {
+  if (desktop) console.log('SSH_HOLD_DESKTOP_READY ' + JSON.stringify({ port, token: process.env.SSH_HOLD_DESKTOP_TOKEN }));
+}
 const requestHandler = async (req, res) => {
   let operationName;
   try {
@@ -225,6 +232,7 @@ const requestHandler = async (req, res) => {
         db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('service',?)").run(JSON.stringify({port:body.port,autoSelect:body.autoSelect}));
         configuredPort=body.port;autoSelectPort=body.autoSelect;
         if(replacement){server=replacement;port=activePort;terminals=attachTerminals(server,{channels,run,holdDir,session:req=>auth.session(req)});}
+        if(replacement) reportDesktopReady();
         res.once('finish',()=>{
           for(const client of statusClients)client.res.end();statusClients.clear();
           previousTerminals.close();
@@ -234,6 +242,7 @@ const requestHandler = async (req, res) => {
               catch(error){console.error('服务重启失败:',error);}
             }
             console.log(`SSH Hold Deck: http://${bindHost}:${port}`);
+            reportDesktopReady();
           });
           previous.closeAllConnections();
         });
@@ -394,5 +403,15 @@ let server=http.createServer(requestHandler);
 let terminals = attachTerminals(server, {channels,run,holdDir, session: req => auth.session(req)});
 port=await bindService(server,configuredPort,bindHost,autoSelectPort);
 console.log(`SSH Hold Deck: http://${bindHost}:${port}`);
+reportDesktopReady();
 setImmediate(() => refreshStatuses().catch(error => console.error('状态更新失败:', error.message)));
 scheduleRefresh();
+
+export async function shutdown() {
+  clearTimeout(refreshTimer);
+  terminals.close();
+  for (const client of statusClients) client.res.end();
+  statusClients.clear();
+  await new Promise(resolve => { server.close(resolve); server.closeAllConnections(); });
+  db.close();
+}

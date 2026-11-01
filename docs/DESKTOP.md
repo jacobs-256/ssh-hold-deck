@@ -1,0 +1,136 @@
+# Desktop Builds
+
+SSH Hold Deck uses Tauri 2 with a bundled Node.js 24 runtime. End users do not
+need Node, npm, Rust or a compiler. The SSH CLI remains a separate dependency;
+the existing dashboard can install ssh-hold into the backend user's directory.
+An OpenSSH client is required; password authentication also requires sshpass.
+
+## Local macOS Build
+
+Prerequisites: Node 24.22.0, Rust 1.90 or later, and Xcode Command Line Tools.
+
+```sh
+npm ci
+npm run desktop:prepare
+npm run desktop:verify
+npm run desktop:build -- --bundles app,dmg -- --locked
+```
+
+Outputs are under `src-tauri/target/release/bundle/`. `npm run desktop:dev`
+prepares the backend and starts the development application.
+
+Runtime, production dependencies and static assets are prepared in the ignored
+`desktop/backend/` directory. Preparation runs on the target OS and architecture;
+do not copy macOS native dependencies to Windows/Linux or across architectures.
+The preparation script copies the current Node executable, so use the documented
+Node version for reproducible local builds. CI pins that version explicitly.
+
+## Windows / WSL2
+
+The native Windows application requires an initialized **WSL2 x64** distribution.
+Ubuntu 22.04 or newer is recommended. Launch the distribution once and finish
+creating its Linux user before opening the desktop application.
+
+The application uses the default distribution. Set `SSH_HOLD_WSL_DISTRO` before
+launching to choose another distribution. It does not install WSL or modify the
+default distribution. Missing WSL2 is reported in the startup window.
+
+The Windows build downloads the Linux backend artifact from the Linux job;
+it never builds Linux PTY modules on the Windows runner. The Windows job then
+runs Tauri/NSIS with the prepared resources. To reproduce this locally, prepare
+the backend on Linux x64, preserve it with tar, extract to `desktop/backend` on
+Windows, copy `build/icons/default/icon.png` to `desktop/loading/icon.png`, and run:
+
+```sh
+npm ci
+npm run desktop:build -- --bundles nsis -- --locked
+```
+
+On startup, resources are copied to the selected WSL user's
+`~/.local/share/ssh-hold-deck/backend/<version>/`. SQLite and uploaded SSH keys
+live separately in `~/.local/share/ssh-hold-deck/data/`; backend replacement does
+not replace this data. SSH configuration and sockets use the WSL user's `~/.ssh`.
+
+In the Windows desktop build, Agent skill management targets the Windows user's
+home directory mounted in WSL (`/mnt/c/Users/...`). It discovers Windows Agent
+configuration directories and skill paths, not WSL Agent installations. Standalone
+CLI tools that have never created a configuration directory may not be detected.
+Displayed paths are the WSL-mounted paths actually used by the backend.
+
+WSL localhost forwarding must be enabled so the Windows window can access the
+loopback service. SSH private-key paths refer to Linux paths in the selected WSL
+distribution. Uploading a private key through the existing UI stores it in that
+backend's data directory. Windows/WSL end-to-end operation still requires a real
+Windows validation run; Linux backend tests alone cannot prove WSL integration.
+
+## Lifecycle and Data
+
+On macOS, allow SSH Hold Deck to access the local network when prompted. If a
+LAN connection reports `No route to host` while Terminal can reach the same
+server, check System Settings > Privacy & Security > Local Network and enable
+SSH Hold Deck, then fully quit and reopen the application. The app bundle
+includes `NSLocalNetworkUsageDescription`; it cannot override a denied permission.
+
+The desktop service binds only to `127.0.0.1`, initially using a free port.
+The window follows backend readiness and permits navigation only to its current
+service origin; external HTTP(S) links open in the system browser. Remote pages
+have no Tauri capabilities. Existing web authentication remains enabled.
+
+On macOS data lives in
+`~/Library/Application Support/com.jacobs256.sshholddeck/data/`.
+Logs use the Tauri application log directory (`backend.log`). The packaged app
+is read-only. Updating or replacing it does not delete the user data directory.
+The desktop database is separate from an existing development checkout's `data/`.
+
+Closing the application closes its web terminals and backend. It does not run
+`ssh-hold stop` and does not intentionally terminate SSH master connections.
+Service port changes report their new origin to the desktop window supervisor.
+
+## GitHub Release Workflow
+
+Commit the desktop sources, lock files, icons and workflows to the repository.
+Do not commit generated backend resources, installer outputs or local data.
+
+1. Set a version with `npm run release:prepare -- 0.2.1`.
+2. Run `cargo check --manifest-path src-tauri/Cargo.toml` to update Cargo.lock.
+3. Commit the changes and create/push matching tag `v0.2.1`.
+4. Create and publish the corresponding GitHub Release, including a prerelease
+   when testing. `.github/workflows/desktop-release.yml` runs automatically.
+5. All three build jobs must pass before the publish job uploads the two DMGs,
+   Windows NSIS EXE and `SHA256SUMS.txt` to that existing Release.
+
+The **Desktop Release** Actions workflow also supports manual dispatch with an
+existing tag. Leave `upload_to_release` false to build downloadable Actions
+artifacts without changing the Release. Enable it only to upload to an existing
+Release. Because the published event fires after publication, a Release may
+temporarily have no installers while builds run. Drafts do not trigger this event.
+
+Workflows use the repository-provided `GITHUB_TOKEN`; no personal token is needed.
+Only the publish job requests `contents: write`. Fork PR checks have read-only
+permissions. PR/main checks run backend tests and a macOS Rust compile check.
+
+## Signing
+
+Without signing credentials, macOS builds use an **ad-hoc signature** with the
+application bundle identifier and sealed Info.plist/resources. This is required
+for consistent local-network permission attribution; a linker-only executable
+signature can use a different identifier from the permission shown in Settings.
+The release workflow verifies the final application signature and identifier.
+These are still **test installers without trusted publisher signing**. They
+can trigger macOS Gatekeeper or Windows SmartScreen. This implementation does not
+claim publicly trusted signing or application auto-updates.
+
+For macOS Developer ID signing/notarization, configure Tauri-supported repository
+Secrets: `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`,
+`APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`.
+Provide the complete credential set; signing/notarization errors fail the build.
+Windows code signing is not configured yet. Add the selected certificate/signing
+service configuration before distributing trusted Windows installers.
+
+## Verification Status
+
+The local Apple Silicon build verifies the bundled runtime hash, SQLite, PTY,
+HTTP resources and clean shutdown when the desktop owner closes stdin. The Node
+test suite and Rust compile checks also run locally. macOS Intel and Windows
+installer generation are configured for GitHub runners and need their first CI
+run; no workflow has been pushed or Release published automatically.
