@@ -135,6 +135,60 @@ jobs:
           workspaces: src-tauri
           save-if: false
       - run: npm ci
+      - name: Validate Apple signing certificate before compiling
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+          import { tmpdir } from 'node:os';
+          import { join } from 'node:path';
+          import { spawnSync } from 'node:child_process';
+          import { randomUUID } from 'node:crypto';
+          const encoded = (process.env.APPLE_CERTIFICATE || '').replace(/\s/g, '');
+          if (!encoded) {
+            if (process.env.APPLE_SIGNING_IDENTITY && process.env.APPLE_SIGNING_IDENTITY !== '-') {
+              throw Error('APPLE_SIGNING_IDENTITY requires APPLE_CERTIFICATE on a fresh runner.');
+            }
+            console.log('No Apple certificate configured; using the ad-hoc test signature.');
+            process.exit(0);
+          }
+          if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length % 4 !== 0) {
+            throw Error('APPLE_CERTIFICATE must be the Base64 contents of an exported .p12 including its private key, not a filename, .cer, or PEM text.');
+          }
+          const directory = mkdtempSync(join(tmpdir(), 'deck-signing-check-'));
+          const keychain = join(directory, 'check.keychain-db');
+          const certificate = join(directory, 'certificate.p12');
+          const password = randomUUID();
+          const security = args => spawnSync('/usr/bin/security', args, { encoding: 'utf8' });
+          try {
+            writeFileSync(certificate, Buffer.from(encoded, 'base64'), { mode: 0o600 });
+            if (security(['create-keychain', '-p', password, keychain]).status !== 0 ||
+                security(['unlock-keychain', '-p', password, keychain]).status !== 0) {
+              throw Error('Cannot create the temporary signing-validation keychain.');
+            }
+            const imported = security(['import', certificate, '-k', keychain, '-f', 'pkcs12',
+              '-P', process.env.APPLE_CERTIFICATE_PASSWORD || '', '-T', '/usr/bin/codesign']);
+            if (imported.status !== 0) {
+              throw Error('Apple certificate import failed. Re-export a .p12 WITH its private key, Base64-encode that file, and set APPLE_CERTIFICATE_PASSWORD to its export password. Certificate contents and tool output are withheld.');
+            }
+            const identities = security(['find-identity', '-v', '-p', 'codesigning', keychain]);
+            if (identities.status !== 0 || !identities.stdout.includes('Developer ID Application:')) {
+              throw Error('The .p12 must contain a valid Developer ID Application certificate AND its matching private key.');
+            }
+            const identity = process.env.APPLE_SIGNING_IDENTITY;
+            if (!identity || identity === '-' || !identities.stdout.includes(identity)) {
+              throw Error('Set APPLE_SIGNING_IDENTITY to the Developer ID Application identity contained in the .p12.');
+            }
+            console.log('Apple Developer ID certificate import and signing identity validated.');
+          } finally {
+            security(['delete-keychain', keychain]);
+            rmSync(directory, { recursive: true, force: true });
+          }
+          NODE
       - name: Prepare native macOS backend
         if: runner.os == 'macOS'
         run: npm run desktop:prepare
@@ -153,7 +207,7 @@ jobs:
           cp build/icons/default/icon.png desktop/loading/icon.png
       - name: Build desktop installer
         env:
-          # With no credentials this produces unsigned test installers.
+          # Without credentials macOS uses an ad-hoc test signature.
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}

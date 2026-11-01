@@ -132,6 +132,25 @@ For macOS Developer ID signing/notarization, configure Tauri-supported repositor
 Secrets: `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`,
 `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`.
 Provide the complete credential set; signing/notarization errors fail the build.
+`APPLE_CERTIFICATE` must contain the Base64-encoded contents of a `.p12` exported
+from Keychain Access with its matching private key. A `.cer` download, file path,
+certificate name or PEM text is not the required value. On your Mac, copy the
+encoded file directly to the clipboard without printing it:
+
+```sh
+base64 -i /path/to/Developer-ID-Application.p12 | pbcopy
+```
+
+Paste into the repository Actions secret `APPLE_CERTIFICATE`. Set
+`APPLE_CERTIFICATE_PASSWORD` to the password chosen when exporting that `.p12`
+(not the Apple ID password), and `APPLE_SIGNING_IDENTITY` to its full
+`Developer ID Application: Your Name (TEAMID)` identity. `APPLE_PASSWORD` is a
+separate Apple app-specific password for notarization. The workflow tests import
+and private-key identity in a disposable keychain before compiling; invalid
+credentials fail early without exposing certificate data in logs. To build a
+test installer without Developer ID signing, remove the signing/notarization
+secrets as a complete set rather than leaving an invalid certificate configured.
+
 Windows code signing is not configured yet. Add the selected certificate/signing
 service configuration before distributing trusted Windows installers.
 
