@@ -146,7 +146,11 @@ For Developer ID builds, the workflow signs every embedded Mach-O binary before
 Tauri bundles and notarizes the app, including Node and all node-pty `.node`
 modules and extensionless `spawn-helper` binaries across bundled architectures.
 Each signature requires the configured team, a secure timestamp and hardened
-runtime. Node receives the project's runtime entitlements. The runtime manifest
+runtime. Node receives the project's runtime entitlements. The signing step
+adds its temporary keychain to the user search list and resolves
+the imported Developer ID identity to its certificate fingerprint. It restores
+the original search list and deletes the temporary keychain on completion or failure.
+The runtime manifest
 hash is refreshed after signing, then SQLite, PTY and service smoke checks run
 again. Signing only the outer application does not cover these resource binaries
 and causes Apple notarization to reject the archive.

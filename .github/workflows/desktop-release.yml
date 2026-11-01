@@ -237,18 +237,32 @@ jobs:
           const password = randomUUID();
           function security(args) {
             const result = spawnSync('/usr/bin/security', args, { encoding: 'utf8' });
-            if (result.status !== 0) throw Error('Temporary native-signing keychain operation failed; tool output withheld.');
+            if (result.status !== 0) throw Error(`Native-signing security ${args[0]} failed; tool output withheld.`);
+            return result;
           }
+          let originalKeychains;
           try {
+            const listed = security(['list-keychains', '-d', 'user']).stdout;
+            originalKeychains = [...listed.matchAll(/"([^"]+)"/g)].map(match => match[1]);
+            if (!originalKeychains.length) throw Error('Cannot resolve the original user keychain search list.');
             writeFileSync(certificate, Buffer.from(process.env.APPLE_CERTIFICATE.replace(/\s/g, ''), 'base64'), { mode: 0o600 });
             security(['create-keychain', '-p', password, keychain]);
             security(['set-keychain-settings', '-lut', '21600', keychain]);
             security(['unlock-keychain', '-p', password, keychain]);
             security(['import', certificate, '-k', keychain, '-f', 'pkcs12', '-P', process.env.APPLE_CERTIFICATE_PASSWORD || '', '-T', '/usr/bin/codesign']);
+            security(['list-keychains', '-d', 'user', '-s', keychain, ...originalKeychains]);
             security(['set-key-partition-list', '-S', 'apple-tool:,apple:', '-s', '-k', password, keychain]);
+            const available = security(['find-identity', '-v', '-p', 'codesigning', keychain]).stdout;
+            const identities = [...available.matchAll(/\b([0-9A-F]{40}) "([^"]+)"/gi)];
+            const matching = identities.filter(([, hash, name]) =>
+              name.startsWith('Developer ID Application:') &&
+              name.endsWith(`(${process.env.APPLE_TEAM_ID})`) &&
+              (name === process.env.APPLE_SIGNING_IDENTITY || hash.toUpperCase() === process.env.APPLE_SIGNING_IDENTITY.toUpperCase()));
+            if (matching.length !== 1) throw Error('Cannot resolve one valid Developer ID signing identity and private key for the configured name/team in the imported keychain.');
+            const fingerprint = matching[0][1];
             for (const file of files) {
               console.log(`Signing native resource: ${relative(root, file)}`);
-              const signed = spawnSync('/usr/bin/codesign', ['--force', '--sign', process.env.APPLE_SIGNING_IDENTITY,
+              const signed = spawnSync('/usr/bin/codesign', ['--force', '--sign', fingerprint,
                 '--keychain', keychain, '--timestamp', '--options', 'runtime',
                 '--entitlements', resolve('src-tauri/Entitlements.plist'), file], { stdio: 'inherit' });
               if (signed.status !== 0) throw Error(`Native signing failed: ${relative(root, file)}`);
@@ -267,6 +281,10 @@ jobs:
             writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
             console.log(`Verified ${files.length} embedded native signatures before app signing and notarization.`);
           } finally {
+            if (originalKeychains?.length) {
+              const restored = spawnSync('/usr/bin/security', ['list-keychains', '-d', 'user', '-s', ...originalKeychains], { stdio: 'ignore' });
+              if (restored.status !== 0) console.error('::warning::Could not restore the original keychain search list.');
+            }
             spawnSync('/usr/bin/security', ['delete-keychain', keychain], { stdio: 'ignore' });
             rmSync(directory, { recursive: true, force: true });
           }
