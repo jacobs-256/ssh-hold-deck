@@ -1,5 +1,8 @@
 (() => {
   const english = {
+    '关闭行为':'Close behavior', '选择点击窗口关闭按钮后的应用行为。':'Choose what happens when the window close button is clicked.',
+    '每次询问':'Ask every time', '最小化到托盘':'Minimize to tray', '退出应用':'Quit application',
+    '托盘图标':'Tray icon', '在系统托盘中显示图标，便于快速执行显示和退出操作。':'Show a system tray icon for quick access to show and quit actions.',
     '安装路径':'Installation path', '待安装路径':'Installation destination', '正在检测 AI Agent…':'Detecting AI Agents…', '未检测到 AI Agent':'No AI Agents detected',
     '服务配置已保存':'Service settings saved',
     '服务配置':'Service', '服务端口':'Service port', '检测':'Check', '自动选择可用端口':'Automatically choose an available port', '当前服务端口':'Active service port', '端口可用':'Port is available', '当前应用正在使用此端口，可继续使用':'This application is using this port; it can be reused', '端口已被占用':'Port is already in use', '未知进程':'Unknown process', '无法读取占用进程详情':'Process details are unavailable', '服务已重启，正在跳转…':'Service restarted. Redirecting…', '服务端口必须为 1024–65535 的整数':'Service port must be an integer from 1024 to 65535', '检测端口占用情况，保存后自动重启 Web 服务并跳转到新地址。Web 终端会断开，SSH 保活通道不受影响。':'Check port usage. Saving restarts the web service and opens the new address. Web terminals disconnect; SSH keepalive channels are preserved.', '配置端口被占用时，自动选择其他可用端口；与端口配置一起保存。':'Choose an available port if the configured port is occupied. Saved together with the port setting.',
@@ -145,8 +148,15 @@
   let preference = 'auto';
   try { preference = localStorage.getItem('ssh-hold-language') || 'auto'; } catch {}
   if (!['auto', 'zh-CN', 'en'].includes(preference)) preference = 'auto';
-  const language = preference === 'auto' ? (/^zh\b/i.test(navigator.languages?.[0] || navigator.language) ? 'zh-CN' : 'en') : preference;
+  const resolveLanguage = () => preference === 'auto' ? (/^zh\b/i.test(navigator.languages?.[0] || navigator.language) ? 'zh-CN' : 'en') : preference;
+  let language = resolveLanguage();
+  const sources = new Map(Object.entries(english).map(([source, translated]) => [translated, source]));
   function t(source) {
+    const translated = translateText(source);
+    if (source != null && translated !== String(source)) sources.set(translated, String(source));
+    return translated;
+  }
+  function translateText(source) {
     if (source == null) return '';
     const text = String(source);
     if (language === 'zh-CN') return text;
@@ -165,9 +175,12 @@
         if (node.parentElement?.closest('script,style,.name,.subtext,td[title]')) continue;
         const text = node.nodeValue.trim();
         if (node.parentElement?.matches('option:not([value])') && ['畅通', '已断开'].includes(text)) node.parentElement.value = text;
-        if (text) node.nodeValue = node.nodeValue.replace(text, () => t(text));
+        if (text) node.nodeValue = node.nodeValue.replace(text, () => t(sources.get(text) || text));
       } else if (!node.matches('.name,.subtext,td[title]')) {
-        for (const attr of ['title', 'placeholder', 'aria-label']) if (node.hasAttribute(attr)) node.setAttribute(attr, t(node.getAttribute(attr)));
+        for (const attr of ['title', 'placeholder', 'aria-label']) if (node.hasAttribute(attr)) {
+          const value = node.getAttribute(attr);
+          node.setAttribute(attr, t(sources.get(value) || value));
+        }
       }
     }
   }
@@ -186,8 +199,8 @@
   menu.onclick = event => {
     const option = event.target.closest('[data-language]');
     if (!option) return;
-    try { localStorage.setItem('ssh-hold-language', option.dataset.language); } catch {}
-    location.reload();
+    setLanguage(option.dataset.language);
+    closeMenu();
   };
   picker.addEventListener('keydown', event => {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeMenu(); toggle.focus(); }
@@ -200,8 +213,24 @@
   });
   document.addEventListener('click', event => { if (!picker.contains(event.target)) closeMenu(); });
   picker.addEventListener('focusout', event => { if (!picker.contains(event.relatedTarget)) closeMenu(); });
-  window.addEventListener('languagechange', () => { if (preference === 'auto') location.reload(); });
-  window.I18n = { t, html, translate, language, preference, mountPicker: root => root.append(picker) };
+  function setLanguage(value) {
+    if (!['auto', 'zh-CN', 'en'].includes(value)) return;
+    preference = value;
+    language = resolveLanguage();
+    try { localStorage.setItem('ssh-hold-language', preference); } catch {}
+    document.documentElement.lang = language;
+    document.title = t('SSH Hold Deck 管理台');
+    translate(document.body);
+    for (const option of menu.querySelectorAll('[data-language]')) {
+      const selected = option.dataset.language === preference;
+      option.setAttribute('aria-checked', String(selected));
+      const icon = option.querySelector('svg, i');
+      if (icon) icon.style.visibility = selected ? '' : 'hidden';
+    }
+    window.dispatchEvent(new CustomEvent('app-languagechange', { detail: { language, preference } }));
+  }
+  window.addEventListener('languagechange', () => { if (preference === 'auto') setLanguage('auto'); });
+  window.I18n = { t, html, translate, get language() { return language; }, get preference() { return preference; }, setLanguage, mountPicker: root => root.append(picker) };
   document.body.append(picker); lucide.createIcons();
   const systemTheme = matchMedia('(prefers-color-scheme: dark)');
   let themePreference = 'auto';

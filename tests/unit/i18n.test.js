@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const source = readFileSync(new URL('../../public/i18n.js', import.meta.url), 'utf8');
 function locale(language, preference) {
-  const select = { addEventListener() {} };
+  const select = { addEventListener() {}, querySelectorAll: () => [], setAttribute() {} };
   let elements = 0;
   const storage = new Map(preference ? [['ssh-hold-language', preference]] : []);
   const sandbox = {
@@ -15,6 +15,8 @@ function locale(language, preference) {
     matchMedia: () => ({ matches: false, addEventListener() {} }),
     NodeFilter: { SHOW_ELEMENT: 1, SHOW_TEXT: 4 }, lucide: { createIcons() {} },
     location: { reload() { sandbox.reloaded = true; } }, addEventListener() {},
+    CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
+    dispatchEvent(event) { sandbox.lastEvent = event; },
   };
   sandbox.window = sandbox;
   vm.runInNewContext(source, sandbox);
@@ -30,7 +32,14 @@ test('automatic locale follows the browser; explicit and persisted preferences o
   assert.equal(locale('zh-CN', 'en').language, 'en');
   assert.equal(locale('en-US', 'invalid').preference, 'auto');
   const selected = locale('en-US'); selected.select.onclick({ target: { closest: () => ({ dataset: { language: 'zh-CN' } }) } });
-  assert.equal(selected.storage.get('ssh-hold-language'), 'zh-CN'); assert.equal(selected.sandbox.reloaded, true);
+  assert.equal(selected.storage.get('ssh-hold-language'), 'zh-CN');
+  assert.equal(selected.sandbox.reloaded, undefined);
+  assert.equal(selected.sandbox.I18n.language, 'zh-CN');
+  assert.equal(selected.sandbox.document.documentElement.lang, 'zh-CN');
+  assert.equal(selected.sandbox.I18n.t('设置'), '设置');
+  selected.sandbox.I18n.setLanguage('en');
+  assert.equal(selected.sandbox.I18n.t('设置'), 'Settings');
+  assert.equal(selected.sandbox.lastEvent.detail.language, 'en');
 });
 
 test('English translates dynamic labels and authentication errors while preserving names and terminal escapes', () => {
