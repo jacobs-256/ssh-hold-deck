@@ -1,6 +1,6 @@
 # Public Release Checklist / 开源发布检查
 
-Desktop installers and GitHub Release automation are planned in [DESKTOP-PACKAGING.md](DESKTOP-PACKAGING.md). / 桌面安装包与 GitHub Release 自动打包方案见该文档。
+Desktop installer and tag/Release automation instructions are in [DESKTOP.md](DESKTOP.md). / 桌面打包与 tag、Release 自动发布步骤见该文档。手动运行 Desktop Release 并输入版本标签即可创建 tag、构建安装包并上传至对应 Release；也支持推送 `v*` 标签触发。
 
 1. Choose a license and add `LICENSE`. Public visibility alone does not make the project open source. / 选择许可证并添加 LICENSE，公开仓库不等同于授予开源许可。
 2. Verify the prerequisite links to https://github.com/CherryLover/ssh-hold and compatibility with the upstream CLI. Keep upstream attribution and distinguish this companion project's license from upstream licensing. / 验证上游安装链接与 CLI 兼容性，保留致谢并区分两个项目的许可证。

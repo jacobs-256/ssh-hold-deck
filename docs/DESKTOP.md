@@ -91,22 +91,30 @@ Service port changes report their new origin to the desktop window supervisor.
 Commit the desktop sources, lock files, icons and workflows to the repository.
 Do not commit generated backend resources, installer outputs or local data.
 
-1. Set a version with `npm run release:prepare -- 0.2.1`.
+1. Set a version with `npm run release:prepare -- 1.0.1`.
 2. Run `cargo check --manifest-path src-tauri/Cargo.toml` to update Cargo.lock.
-3. Commit the changes and create/push matching tag `v0.2.1`.
-4. Create and publish the corresponding GitHub Release, including a prerelease
-   when testing. `.github/workflows/desktop-release.yml` runs automatically.
-5. All three build jobs must pass before the publish job uploads the two DMGs,
-   Windows NSIS EXE and `SHA256SUMS.txt` to that existing Release.
+3. Commit and push the version changes to `main`.
+4. In Actions > **Desktop Release** > **Run workflow**, select `main` and enter
+   `v1.0.1`. The workflow validates the version, creates the missing annotated
+   tag and pushes it. An existing tag is reused without moving it.
+5. All checks and three platform builds must pass before the workflow creates
+   the GitHub Release with generated notes and attaches the two DMGs, Windows
+   NSIS EXE and `SHA256SUMS.txt`. An existing Release receives updated assets.
 
-The **Desktop Release** Actions workflow also supports manual dispatch with an
-existing tag. Leave `upload_to_release` false to build downloadable Actions
-artifacts without changing the Release. Enable it only to upload to an existing
-Release. Because the published event fires after publication, a Release may
-temporarily have no installers while builds run. Drafts do not trigger this event.
+Alternatively, push a matching `v*` tag to trigger the same workflow directly.
+Publishing a Release manually remains supported. All build jobs use the exact
+commit resolved by the prepare job. Manual runs always publish after successful
+builds; there is no separate upload switch. Tags containing a prerelease suffix
+must match the complete package version and create a prerelease automatically.
+Tags created by the workflow's `GITHUB_TOKEN` do not trigger a second workflow;
+the current run performs the builds and publication itself. A failed build may
+leave a tag, but does not create a new Release. Rerun with that tag to retry.
+For the existing `v1.0.0` tag, run this updated workflow from `main` and enter
+`v1.0.0`; the workflow definition comes from `main`, while the packaged code
+comes from the existing tag.
 
 Workflows use the repository-provided `GITHUB_TOKEN`; no personal token is needed.
-Only the publish job requests `contents: write`. Fork PR checks have read-only
+Only the prepare and publish jobs request `contents: write`. Fork PR checks have read-only
 permissions. PR/main checks run backend tests and a macOS Rust compile check.
 
 ## Signing

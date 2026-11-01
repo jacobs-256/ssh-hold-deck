@@ -1,38 +1,79 @@
 name: Desktop Release
 
 on:
+  push:
+    tags: ['v*']
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing version tag (for example v0.2.0)
+        description: Release tag to create or reuse (for example v1.0.0)
         required: true
         type: string
-      upload_to_release:
-        description: Upload installers to the existing release
-        default: false
-        type: boolean
 
 permissions:
   contents: read
 
 concurrency:
-  group: desktop-release-${{ github.event.release.tag_name || inputs.tag }}
+  group: desktop-release-${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
-  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
   NODE_VERSION: '24.22.0'
 
 jobs:
+  prepare:
+    name: Prepare release tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      commit: ${{ steps.meta.outputs.commit }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Resolve and validate release commit
+        id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "Invalid release tag: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            git checkout --detach "refs/tags/$RELEASE_TAG"
+          elif [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            echo "Release tag does not exist: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          node scripts/check-release-version.mjs
+          if ! git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git tag -a "$RELEASE_TAG" -m "Release $RELEASE_TAG"
+            git push origin "refs/tags/$RELEASE_TAG"
+          fi
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   validate:
+    needs: prepare
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.prepare.outputs.commit }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -42,13 +83,13 @@ jobs:
       - run: npm test
 
   wsl-backend:
-    needs: validate
+    needs: [prepare, validate]
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.prepare.outputs.commit }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -64,7 +105,7 @@ jobs:
           retention-days: 7
 
   build:
-    needs: [validate, wsl-backend]
+    needs: [prepare, validate, wsl-backend]
     strategy:
       fail-fast: false
       matrix:
@@ -83,7 +124,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.prepare.outputs.commit }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -133,8 +174,7 @@ jobs:
           retention-days: 14
 
   publish:
-    needs: build
-    if: github.event_name == 'release' || inputs.upload_to_release
+    needs: [prepare, validate, build]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -156,5 +196,12 @@ jobs:
           test "$(find . -maxdepth 1 -name '*.exe' | wc -l)" -eq 1
           cat ./*.sha256 > SHA256SUMS.txt
           sha256sum --check SHA256SUMS.txt
-          gh release view "$RELEASE_TAG" --repo "$REPOSITORY"
-          gh release upload "$RELEASE_TAG" ./*.dmg ./*.exe SHA256SUMS.txt --repo "$REPOSITORY" --clobber
+          if gh release view "$RELEASE_TAG" --repo "$REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" ./*.dmg ./*.exe SHA256SUMS.txt --repo "$REPOSITORY" --clobber
+          else
+            release_args=()
+            if [[ "$RELEASE_TAG" == *-* ]]; then release_args+=(--prerelease); fi
+            gh release create "$RELEASE_TAG" --repo "$REPOSITORY" \
+              --title "SSH Hold Deck $RELEASE_TAG" --generate-notes --verify-tag \
+              "${release_args[@]}" ./*.dmg ./*.exe SHA256SUMS.txt
+          fi
