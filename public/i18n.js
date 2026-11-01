@@ -1,5 +1,6 @@
 (() => {
   const english = {
+    '系统':'System',
     '关闭行为':'Close behavior', '选择点击窗口关闭按钮后的应用行为。':'Choose what happens when the window close button is clicked.',
     '每次询问':'Ask every time', '最小化到托盘':'Minimize to tray', '退出应用':'Quit application',
     '托盘图标':'Tray icon', '在系统托盘中显示图标，便于快速执行显示和退出操作。':'Show a system tray icon for quick access to show and quit actions.',
