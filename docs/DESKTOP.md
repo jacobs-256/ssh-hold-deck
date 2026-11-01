@@ -131,6 +131,12 @@ claim publicly trusted signing or application auto-updates.
 For macOS Developer ID signing/notarization, configure Tauri-supported repository
 Secrets: `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`,
 `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`.
+Manual runs default to `apple_signing: false`: the build process removes all
+Apple credential environment variables and explicitly uses an ad-hoc signature,
+even if signing secrets exist in the repository. Tag pushes and Release events
+also use this test mode. To create a Developer ID build, manually run the workflow
+from `main` and enable **apple_signing**. Empty Apple variables are removed before
+invoking Tauri because an empty `APPLE_CERTIFICATE` can still trigger import.
 Provide the complete credential set; signing/notarization errors fail the build.
 `APPLE_CERTIFICATE` must contain the Base64-encoded contents of a `.p12` exported
 from Keychain Access with its matching private key. A `.cer` download, file path,

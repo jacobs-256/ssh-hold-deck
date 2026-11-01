@@ -11,6 +11,10 @@ on:
         description: Release tag to create or reuse (for example v1.0.0)
         required: true
         type: string
+      apple_signing:
+        description: Enable Developer ID signing and notarization (requires valid Apple secrets)
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -136,7 +140,7 @@ jobs:
           save-if: false
       - run: npm ci
       - name: Validate Apple signing certificate before compiling
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && inputs.apple_signing == true
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -150,11 +154,7 @@ jobs:
           import { randomUUID } from 'node:crypto';
           const encoded = (process.env.APPLE_CERTIFICATE || '').replace(/\s/g, '');
           if (!encoded) {
-            if (process.env.APPLE_SIGNING_IDENTITY && process.env.APPLE_SIGNING_IDENTITY !== '-') {
-              throw Error('APPLE_SIGNING_IDENTITY requires APPLE_CERTIFICATE on a fresh runner.');
-            }
-            console.log('No Apple certificate configured; using the ad-hoc test signature.');
-            process.exit(0);
+            throw Error('Apple signing was enabled but APPLE_CERTIFICATE is missing. Disable apple_signing for an ad-hoc test build.');
           }
           if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length % 4 !== 0) {
             throw Error('APPLE_CERTIFICATE must be the Base64 contents of an exported .p12 including its private key, not a filename, .cer, or PEM text.');
@@ -207,14 +207,33 @@ jobs:
           cp build/icons/default/icon.png desktop/loading/icon.png
       - name: Build desktop installer
         env:
-          # Without credentials macOS uses an ad-hoc test signature.
+          ENABLE_APPLE_SIGNING: ${{ runner.os == 'macOS' && inputs.apple_signing == true }}
+          DESKTOP_BUNDLES: ${{ matrix.bundles }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npm run desktop:build -- --bundles ${{ matrix.bundles }} -- --locked
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { spawnSync } from 'node:child_process';
+          const env = { ...process.env };
+          const signing = env.ENABLE_APPLE_SIGNING === 'true';
+          for (const key of Object.keys(env)) {
+            if (key.startsWith('APPLE_') && (!signing || !env[key])) delete env[key];
+          }
+          if (process.platform === 'darwin' && !signing) {
+            env.APPLE_SIGNING_IDENTITY = '-';
+            console.log('macOS signing mode: ad-hoc. Apple certificate import and notarization are disabled.');
+          }
+          const result = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm',
+            ['run', 'desktop:build', '--', '--bundles', env.DESKTOP_BUNDLES, '--', '--locked'],
+            { env, stdio: 'inherit', shell: process.platform === 'win32' });
+          if (result.error) throw result.error;
+          process.exit(result.status ?? 1);
+          NODE
       - name: Verify macOS application identity and signature
         if: runner.os == 'macOS'
         run: node scripts/verify-macos-bundle.mjs
