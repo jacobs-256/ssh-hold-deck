@@ -122,6 +122,12 @@ Main modules: `src/server.js` (HTTP, SQLite, channel operations), `src/auth.js` 
 | Terminal rejected | Use localhost or the server LAN IP, sign in again, and confirm that the channel is connected |
 | Connected but keepalive stopped | The SSH master and extra keepalive process are independent; Refresh to verify current status |
 
+## Configuration Backup and Restore
+
+Open **Settings → System → Configuration backup**, enter a backup password of at least 8 characters, and select **Export settings** to download an encrypted JSON file. The backup includes channels, connection passwords and private keys, JumpServer credentials, login configuration, service settings, and the current browser's appearance preferences. Desktop backups also include close behavior and tray preferences. Keep the file and password safe; the password cannot be recovered.
+
+To restore, enter the backup password, select **Import settings**, choose the file, and confirm replacement. Validated settings are restored in a database transaction, private keys are saved with restricted local permissions, and existing logins are revoked. Sign in using the backed-up login password. Port settings take effect on the next application start. Running SSH/terminal sessions, system SSH configuration, and externally installed software are not included; importing does not automatically connect channels.
+
 ## Upstream Project and Acknowledgments
 
 SSH Hold Deck builds on [CherryLover/ssh-hold](https://github.com/CherryLover/ssh-hold). Thank you to its author and contributors for the SSH channel management foundation.

@@ -273,6 +273,68 @@
       const text=document.createElement('span');text.textContent=message;serviceToast.append(icon,text);serviceToast.classList.toggle('is-error',error);serviceToast.hidden=false;lucide.createIcons();
       toastTimer=setTimeout(()=>{serviceToast.hidden=true;},4500);
     }
+    const backupRow = document.createElement('div'); backupRow.className = 'preference-row backup-setting-row';
+    backupRow.innerHTML = I18n.html('<div class="setting-copy"><h3>配置备份</h3><p>导出全部配置、通道及连接凭据为加密文件。导入会覆盖当前配置，端口配置在下次启动时生效。</p></div><form class="backup-controls"><input type="password" name="password" minlength="8" maxlength="256" required autocomplete="new-password" aria-label="备份密码" placeholder="备份密码（至少 8 个字符）"><div class="setting-controls"><button type="button" class="secondary" data-backup="export"><i data-lucide="download"></i>导出配置</button><button type="button" class="secondary" data-backup="import"><i data-lucide="upload"></i>导入配置</button></div><input type="file" accept=".json,application/json" hidden></form>');
+    serviceSection.querySelector('.settings-group').append(backupRow);
+    const backupForm = backupRow.querySelector('form'), backupFile = backupRow.querySelector('[type=file]');
+    const preferenceKeys = ['ssh-hold-language', 'ssh-hold-theme', 'ssh-hold-text-size', 'channelPageSize'];
+    let backupBusy = false;
+    const lockBackup = busy => { backupBusy = busy; backupRow.querySelectorAll('input,button').forEach(item => { item.disabled = busy; }); };
+    backupForm.onsubmit = event => event.preventDefault();
+    backupRow.querySelector('[data-backup=export]').onclick = async () => {
+      if (backupBusy || !backupForm.reportValidity()) return;
+      lockBackup(true);
+      try {
+        const desktopInvoke = window.__TAURI__?.core?.invoke;
+        const filename = `ssh-hold-deck-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        const handle = !desktopInvoke && window.showSaveFilePicker ? await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: 'SSH Hold Deck backup', accept: { 'application/json': ['.json'] } }] }) : null;
+        const preferences = {};
+        for (const key of preferenceKeys) { const value = localStorage.getItem(key); if (value !== null) preferences[key] = value; }
+        const desktop = window.__TAURI__?.core?.invoke ? await window.__TAURI__.core.invoke('desktop_settings', { settings: null }) : null;
+        const backup = await call('/api/settings/backup/export', { password: backupForm.elements.password.value, preferences, desktop });
+        const contents = JSON.stringify(backup, null, 2);
+        if (desktopInvoke) {
+          if (!await desktopInvoke('desktop_save_backup', { contents })) return;
+        } else if (handle) {
+          const writable = await handle.createWritable();
+          try { await writable.write(contents); await writable.close(); }
+          catch (error) { await writable.abort().catch(() => {}); throw error; }
+        } else {
+          const blob = new Blob([contents], { type: 'application/json' });
+          const url = URL.createObjectURL(blob), link = document.createElement('a');
+          link.href = url; link.download = filename;
+          document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+        }
+        notifyService(I18n.t('备份文件已导出，请妥善保管备份密码')); backupForm.elements.password.value = '';
+      } catch (error) { if (error.name !== 'AbortError') notifyService(error.message || String(error), true); }
+      finally { lockBackup(false); }
+    };
+    backupRow.querySelector('[data-backup=import]').onclick = () => {
+      if (!backupBusy && backupForm.reportValidity()) { backupFile.value = ''; backupFile.click(); }
+    };
+    backupFile.onchange = async () => {
+      const file = backupFile.files[0]; if (!file || backupBusy) return;
+      if (file.size > 20 * 1024 * 1024 - 2048) { notifyService(I18n.t('备份文件过大（最大 20MB）'), true); return; }
+      if (!await window.showMessage(I18n.t('导入将覆盖全部配置和通道列表，恢复备份中的登录密码，并退出当前登录。是否继续？'), true)) return;
+      lockBackup(true);
+      try {
+        const backup = JSON.parse(await file.text());
+        const result = await call('/api/settings/backup/import', { password: backupForm.elements.password.value, backup, confirmed: true });
+        let desktopError = false;
+        if (result.desktop && window.__TAURI__?.core?.invoke) {
+          try { await window.__TAURI__.core.invoke('desktop_settings', { settings: result.desktop }); }
+          catch { desktopError = true; }
+        }
+        try {
+          for (const key of preferenceKeys) {
+            if (Object.hasOwn(result.preferences, key)) localStorage.setItem(key, result.preferences[key]); else localStorage.removeItem(key);
+          }
+        } catch { desktopError = true; }
+        if (desktopError) await window.showMessage(I18n.t('服务配置和通道已还原，部分本机偏好未能恢复，请重新设置。'));
+        notifyService(I18n.t('配置已还原，请使用备份中的登录密码重新登录。端口配置在下次启动时生效。'));
+        setTimeout(() => location.reload(), 1800);
+      } catch (error) { notifyService(error instanceof SyntaxError ? I18n.t('备份文件格式无效') : error.message, true); lockBackup(false); }
+    };
     let serviceBusy=false;
     if (window.__TAURI__?.core?.invoke) {
       const invoke = window.__TAURI__.core.invoke;

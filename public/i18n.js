@@ -1,5 +1,18 @@
 (() => {
   const english = {
+    '配置备份':'Configuration backup', '备份密码':'Backup password', '备份密码（至少 8 个字符）':'Backup password (at least 8 characters)',
+    '导出配置':'Export settings', '导入配置':'Import settings',
+    '导出全部配置、通道及连接凭据为加密文件。导入会覆盖当前配置，端口配置在下次启动时生效。':'Export all settings, channels and connection credentials to an encrypted file. Import replaces current settings. Port settings take effect on the next start.',
+    '备份文件已导出，请妥善保管备份密码':'Backup exported. Keep your backup password safe.',
+    '备份文件过大（最大 20MB）':'Backup file is too large (maximum 20MB)',
+    '导入将覆盖全部配置和通道列表，恢复备份中的登录密码，并退出当前登录。是否继续？':'Import replaces all settings and channels, restores the backed-up login password, and signs you out. Continue?',
+    '服务配置和通道已还原，部分本机偏好未能恢复，请重新设置。':'Service settings and channels were restored. Some local preferences could not be restored; please set them again.',
+    '配置已还原，请使用备份中的登录密码重新登录。端口配置在下次启动时生效。':'Settings restored. Sign in with the backed-up login password. Port settings take effect on the next start.',
+    '备份文件格式无效':'Invalid backup file format', '备份密码须为 8–256 个字符':'Backup password must be 8–256 characters',
+    '备份密码错误或文件已损坏':'Incorrect backup password or damaged file', '备份通道配置无效':'Invalid channel configuration in backup',
+    '备份设置无效':'Invalid settings in backup', '备份缺少登录配置':'Login settings are missing from backup',
+    '备份界面配置无效':'Invalid appearance preferences in backup', '备份桌面配置无效':'Invalid desktop settings in backup',
+    '请确认覆盖现有配置':'Confirm replacing current settings', '存在进行中的操作，请稍后重试':'Operations are in progress. Try again later.',
     '系统':'System',
     '关闭行为':'Close behavior', '选择点击窗口关闭按钮后的应用行为。':'Choose what happens when the window close button is clicked.',
     '每次询问':'Ask every time', '最小化到托盘':'Minimize to tray', '退出应用':'Quit application',

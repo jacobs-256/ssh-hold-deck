@@ -1,4 +1,5 @@
 import { connectionAvailability } from './connection-config.js';
+import { backupLimit, encodeBackup, decodeBackup } from './backup.js';
 import { createAgentSkills } from './agent-skills.js';
 import { jumpOptions } from './jump.js';
 import { JumpServerClient, normalizeServer, publicServer } from './jumpserver.js';
@@ -10,7 +11,7 @@ import { cliStatus, installCli } from './cli-install.js';
 import { bindService, checkPort, validPort } from './service-port.js';
 import http from 'node:http';
 import { execFile, spawn } from 'node:child_process';
-import { readFile, writeFile, mkdir, chmod, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, chmod, readdir, rm } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -30,7 +31,16 @@ const run = (args, input = '') => new Promise((resolve) => {
   execFile('ssh-hold', args, { timeout: 30000, maxBuffer: 1024 * 1024, env: { ...process.env, SSH_HOLD_DIR: holdDir } }, (error, stdout, stderr) => resolve({ ok: !error, stdout, stderr, code: error?.code }));
 });
 const json = (res, code, data) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); };
-const readBody = (req) => new Promise((resolve, reject) => { let b = ''; req.on('data', c => { b += c; if (b.length > 1024 * 1024) reject(new Error('请求过大')); }); req.on('end', () => { try { resolve(JSON.parse(b || '{}')); } catch { reject(new Error('JSON 无效')); } }); });
+const readBody = (req, limit = 1024 * 1024) => new Promise((resolve, reject) => {
+  const chunks = []; let size = 0, exceeded = false;
+  req.on('data', chunk => {
+    size += chunk.length;
+    if (size > limit) { exceeded = true; chunks.length = 0; reject(Object.assign(new Error('请求过大'), { status: 413 })); }
+    else if (!exceeded) chunks.push(chunk);
+  });
+  req.on('error', reject);
+  req.on('end', () => { if (exceeded) return; try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); } catch { reject(Object.assign(new Error('JSON 无效'), { status: 400 })); } });
+});
 const encrypt = (value) => { const iv = crypto.randomBytes(12); const c = crypto.createCipheriv('aes-256-gcm', vaultKey, iv); const data = Buffer.concat([c.update(JSON.stringify(value), 'utf8'), c.final()]); return JSON.stringify({ iv: iv.toString('base64'), tag: c.getAuthTag().toString('base64'), data: data.toString('base64') }); };
 const decrypt = (raw) => { try { const x = JSON.parse(raw); const d = crypto.createDecipheriv('aes-256-gcm', vaultKey, Buffer.from(x.iv, 'base64')); d.setAuthTag(Buffer.from(x.tag, 'base64')); return JSON.parse(Buffer.concat([d.update(Buffer.from(x.data, 'base64')), d.final()]).toString()); } catch { return {}; } };
 const dataDir = process.env.SSH_HOLD_WEB_DATA_DIR || path.join(root, 'data');
@@ -209,6 +219,54 @@ const requestHandler = async (req, res) => {
       return json(res, 200, { ok: true });
     }
     if (url.pathname.startsWith('/api/') && !auth.session(req)) return json(res, 401, { error: '请先登录', setupRequired: !auth.configured() });
+    if (url.pathname === '/api/settings/backup/export' && req.method === 'POST') {
+      if (!validOrigin(req, true)) return json(res, 403, { error: '请求来源无效' });
+      const body = await readBody(req);
+      const payload = { version: 1, createdAt: new Date().toISOString(), channels: [], settings: [], preferences: body.preferences || {}, desktop: body.desktop || null };
+      for (const row of db.prepare('SELECT name, config FROM channels ORDER BY name').all()) payload.channels.push({ name: row.name, config: decrypt(row.config) });
+      for (const row of db.prepare('SELECT key, value FROM settings').all()) payload.settings.push({ ...row, value: row.key === 'jumpservers' ? JSON.stringify(decrypt(row.value)) : row.value });
+      for (const item of payload.channels) {
+        if (item.config.auth === 'key') {
+          try { item.identityContent = await readFile(item.config.identity, 'utf8'); }
+          catch { throw Object.assign(new Error('无法读取通道私钥，备份已取消：' + item.name), { status: 400 }); }
+        }
+      }
+      const backup = await encodeBackup(payload, body.password);
+      if (!auth.session(req)) return json(res, 401, { error: '请先登录' });
+      if (Buffer.byteLength(JSON.stringify(backup)) > backupLimit - 2048) return json(res, 413, { error: '备份文件过大（最大 20MB）' });
+      res.setHeader('Content-Disposition', `attachment; filename="ssh-hold-deck-backup-${new Date().toISOString().slice(0, 10)}.json"`);
+      return json(res, 200, backup);
+    }
+    if (url.pathname === '/api/settings/backup/import' && req.method === 'POST') {
+      if (!validOrigin(req, true)) return json(res, 403, { error: '请求来源无效' });
+      const body = await readBody(req, backupLimit);
+      if (body.confirmed !== true) return json(res, 400, { error: '请确认覆盖现有配置' });
+      const payload = await decodeBackup(body.backup, body.password);
+      if (channelOperations.size || restarting) return json(res, 409, { error: '存在进行中的操作，请稍后重试' });
+      const files = [];
+      try {
+        for (const item of payload.channels) {
+          if (item.config.auth === 'key') {
+            const identity = { auth: 'key', identityContent: item.identityContent };
+            await storeIdentity(identity); files.push(identity.identity); item.config.identity = identity.identity;
+          }
+        }
+        if (!auth.session(req)) throw Object.assign(new Error('请先登录'), { status: 401 });
+        if (channelOperations.size || restarting) throw Object.assign(new Error('存在进行中的操作，请稍后重试'), { status: 409 });
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          db.exec('DELETE FROM channels; DELETE FROM channel_status; DELETE FROM settings; DELETE FROM web_sessions');
+          for (const item of payload.channels) saveChannel(item.name, item.config);
+          for (const item of payload.settings) db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(item.key, item.key === 'jumpservers' ? encrypt(JSON.parse(item.value)) : item.value);
+          db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('initialized', '1')").run();
+          db.exec('COMMIT');
+        } catch (error) { db.exec('ROLLBACK'); throw error; }
+      } catch (error) { await Promise.all(files.map(file => rm(file, { force: true }))); throw error; }
+      refreshSeconds = Number(payload.settings.find(item => item.key === 'refreshSeconds')?.value ?? 30);
+      scheduleRefresh();
+      for (const client of statusClients) client.res.end(); statusClients.clear();
+      return json(res, 200, { ok: true, channels: payload.channels.length, preferences: payload.preferences, desktop: payload.desktop, restartRequired: true });
+    }
     if(url.pathname==='/api/settings/service'&&req.method==='GET')return json(res,200,{port:configuredPort,activePort:port,autoSelect:autoSelectPort});
     if(url.pathname==='/api/settings/service/check'&&req.method==='POST') {
       if(!validOrigin(req,true))return json(res,403,{error:'请求来源无效'});

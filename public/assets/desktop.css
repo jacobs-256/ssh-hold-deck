@@ -205,6 +205,10 @@ html body.ui-aligned .inline-password input {margin-top:5px;width:100%;backgroun
 .service-port-form {flex-shrink:0;max-width:100%}
 html body.ui-aligned .service-port-form input {width:100px;min-width:0;height:36px;border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--page);color:var(--secondary)}
 .service-port-form .setting-feedback {max-width:360px}
+.backup-controls {display:flex;flex-direction:column;gap:8px;max-width:100%;width:340px;flex-shrink:0}
+html body.ui-aligned .backup-controls input[type=password] {box-sizing:border-box;width:100%;min-width:0;height:36px;border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--page);color:var(--secondary)}
+.backup-controls .setting-controls {flex-wrap:wrap}
+@media(max-width:700px) {.backup-setting-row {flex-wrap:wrap}.backup-controls {width:100%}}
 .service-toast {position:fixed;right:24px;bottom:24px;z-index:100;display:flex;align-items:center;gap:10px;width:420px;max-width:calc(100vw / var(--app-scale,1) - 32px);padding:16px 20px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--text);box-shadow:0 8px 24px #0003;font-size:13px;line-height:20px;overflow-wrap:anywhere}
 .service-toast svg {width:20px;height:20px;flex-shrink:0}.service-toast.is-error svg {color:var(--danger)}
 .service-toast {box-shadow:0 8px 28px #0003,0 0 0 1px color-mix(in srgb,var(--text) 6%,transparent),0 0 22px color-mix(in srgb,var(--accent) 12%,transparent)}

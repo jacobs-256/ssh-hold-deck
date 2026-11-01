@@ -30,13 +30,36 @@ fn show_main(app: &tauri::AppHandle) {
     }
 }
 
-#[tauri::command]
-fn desktop_settings(app: tauri::AppHandle, window: tauri::WebviewWindow, settings: Option<DesktopSettings>) -> Result<DesktopSettings, String> {
+fn verify_desktop_origin(app: &tauri::AppHandle, window: &tauri::WebviewWindow) -> Result<(), String> {
     let url = window.url().map_err(|e| e.to_string())?;
     let port = *app.state::<Arc<Backend>>().port.lock().unwrap();
     if url.scheme() != "http" || url.host_str() != Some("127.0.0.1") || port.is_none() || url.port() != port {
         return Err("Untrusted settings origin".into());
     }
+    Ok(())
+}
+
+#[tauri::command]
+async fn desktop_save_backup(app: tauri::AppHandle, window: tauri::WebviewWindow, contents: String) -> Result<bool, String> {
+    verify_desktop_origin(&app, &window)?;
+    if contents.len() > 20 * 1024 * 1024 { return Err("Backup exceeds 20MB".into()); }
+    let envelope: serde_json::Value = serde_json::from_str(&contents).map_err(|e| e.to_string())?;
+    if envelope["format"].as_str() != Some("ssh-hold-deck-backup") || envelope["version"].as_u64() != Some(1) {
+        return Err("Invalid backup format".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let file = app.dialog().file().add_filter("SSH Hold Deck backup", &["json"])
+            .set_file_name("ssh-hold-deck-backup.json").blocking_save_file();
+        let Some(file) = file else { return Ok(false); };
+        let path = file.into_path().map_err(|e| e.to_string())?;
+        std::fs::write(path, contents).map_err(|e| e.to_string())?;
+        Ok(true)
+    }).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn desktop_settings(app: tauri::AppHandle, window: tauri::WebviewWindow, settings: Option<DesktopSettings>) -> Result<DesktopSettings, String> {
+    verify_desktop_origin(&app, &window)?;
     let state = app.state::<DesktopState>();
     let mut current = state.0.lock().unwrap();
     if let Some(settings) = settings {
@@ -173,7 +196,7 @@ fn main() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![desktop_settings])
+        .invoke_handler(tauri::generate_handler![desktop_settings, desktop_save_backup])
         .setup({ let backend = backend.clone(); move |app| {
             let state = backend.clone();
             let navigation_app = app.handle().clone();
