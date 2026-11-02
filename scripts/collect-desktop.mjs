@@ -23,6 +23,10 @@ await copyFile(installers[0], path.join('dist-desktop', name));
 const sha = createHash('sha256').update(await readFile(installers[0])).digest('hex');
 await writeFile(path.join('dist-desktop', name + '.sha256'), `${sha}  ${name}\n`);
 console.log(name);
+if (!process.env.TAURI_UPDATER_PUBLIC_KEY?.trim()) {
+  console.log('Standalone installer collected; online updater is disabled.');
+  process.exit(0);
+}
 
 const updateSource = label.startsWith('macos') ? path.resolve('src-tauri/target/release/bundle/macos') : source;
 const updateExtension = label.startsWith('macos') ? '.app.tar.gz' : '.exe';

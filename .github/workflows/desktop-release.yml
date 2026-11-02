@@ -140,14 +140,18 @@ jobs:
           workspaces: src-tauri
           save-if: false
       - run: npm ci
-      - name: Require updater signing configuration
+      - name: Validate optional updater signing configuration
         env:
-          TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
+          TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY || secrets.TAURI_UPDATER_PUBLIC_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         shell: bash
         run: |
-          test -n "$TAURI_UPDATER_PUBLIC_KEY" || { echo 'Configure repository variable TAURI_UPDATER_PUBLIC_KEY'; exit 1; }
-          test -n "$TAURI_SIGNING_PRIVATE_KEY" || { echo 'Configure secret TAURI_SIGNING_PRIVATE_KEY'; exit 1; }
+          if [ -z "$TAURI_UPDATER_PUBLIC_KEY" ] && [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo 'Updater signing is not configured; building standalone installers only.'
+          elif [ -z "$TAURI_UPDATER_PUBLIC_KEY" ] || [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo 'Configure both TAURI_UPDATER_PUBLIC_KEY and TAURI_SIGNING_PRIVATE_KEY, or neither.'
+            exit 1
+          fi
       - name: Validate Apple signing certificate before compiling
         if: runner.os == 'macOS' && inputs.apple_signing == true
         env:
@@ -310,7 +314,7 @@ jobs:
           cp build/icons/default/icon.png desktop/loading/icon.png
       - name: Build desktop installer
         env:
-          TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
+          TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY || secrets.TAURI_UPDATER_PUBLIC_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           ENABLE_APPLE_SIGNING: ${{ runner.os == 'macOS' && inputs.apple_signing == true }}
@@ -344,6 +348,8 @@ jobs:
         if: runner.os == 'macOS'
         run: node scripts/verify-macos-bundle.mjs
       - name: Collect installer and checksum
+        env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY || secrets.TAURI_UPDATER_PUBLIC_KEY }}
         run: node scripts/collect-desktop.mjs ${{ matrix.label }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -388,8 +394,15 @@ jobs:
               --title "SSH Hold Deck $RELEASE_TAG" --generate-notes --verify-tag --draft \
               "${release_args[@]}"
           fi
-          gh release view "$RELEASE_TAG" --repo "$REPOSITORY" --json body --jq '.body' > release-notes.txt
-          node ../scripts/create-update-manifest.mjs . "$REPOSITORY" "$RELEASE_TAG" release-notes.txt
-          gh release upload "$RELEASE_TAG" ./*.dmg ./*.exe ./*.app.tar.gz ./*.sig SHA256SUMS.txt --repo "$REPOSITORY" --clobber
-          gh release upload "$RELEASE_TAG" latest.json --repo "$REPOSITORY" --clobber
+          shopt -s nullglob
+          update_metadata=(update-*.json)
+          if [ "${#update_metadata[@]}" -gt 0 ]; then
+            gh release view "$RELEASE_TAG" --repo "$REPOSITORY" --json body --jq '.body' > release-notes.txt
+            node ../scripts/create-update-manifest.mjs . "$REPOSITORY" "$RELEASE_TAG" release-notes.txt
+          fi
+          assets=(./*.dmg ./*.exe ./*.app.tar.gz ./*.sig SHA256SUMS.txt)
+          gh release upload "$RELEASE_TAG" "${assets[@]}" --repo "$REPOSITORY" --clobber
+          if [ -f latest.json ]; then
+            gh release upload "$RELEASE_TAG" latest.json --repo "$REPOSITORY" --clobber
+          fi
           gh release edit "$RELEASE_TAG" --repo "$REPOSITORY" --draft=false

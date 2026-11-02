@@ -224,7 +224,9 @@ same key pair across releases; replacing the public key breaks updates from
 installed clients that trust the previous key. Updater signing is independent of
 Apple Developer ID / notarization and Windows publisher signing.
 
-Release builds require both the public key and private key. Tauri creates signed
+Release builds without either key publish standalone installers and checksums,
+without an online update manifest. Configuring only one key fails validation;
+online updates require both the public key and private key. Tauri creates signed
 `.app.tar.gz` macOS updates and signed Windows NSIS installers. Collection records
 the actual artifact name and signature for each architecture. Publication checks
 all three artifacts, creates `latest.json` with release notes, uploads packages
