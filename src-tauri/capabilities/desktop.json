@@ -2,5 +2,5 @@
   "identifier": "desktop-settings",
   "windows": ["main"],
   "remote": { "urls": ["http://127.0.0.1:*"] },
-  "permissions": ["allow-desktop-settings", "allow-desktop-save-backup", "allow-desktop-update"]
+  "permissions": ["allow-desktop-settings", "allow-desktop-save-backup", "allow-desktop-update", "allow-desktop-open-link"]
 }

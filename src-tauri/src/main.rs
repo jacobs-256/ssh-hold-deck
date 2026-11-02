@@ -42,6 +42,19 @@ fn verify_desktop_origin(app: &tauri::AppHandle, window: &tauri::WebviewWindow) 
 }
 
 #[tauri::command]
+fn desktop_open_link(app: tauri::AppHandle, window: tauri::WebviewWindow, url: String) -> Result<(), String> {
+    verify_desktop_origin(&app, &window)?;
+    if ![
+        "https://github.com/jacobs-256/ssh-hold-deck",
+        "https://github.com/jacobs-256/ssh-hold-deck/issues",
+        "https://github.com/jacobs-256/ssh-hold-deck/releases/latest",
+    ].contains(&url.as_str()) {
+        return Err("Unsupported external link".into());
+    }
+    app.opener().open_url(url, None::<&str>).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 async fn desktop_save_backup(app: tauri::AppHandle, window: tauri::WebviewWindow, contents: String) -> Result<bool, String> {
     verify_desktop_origin(&app, &window)?;
     if contents.len() > 20 * 1024 * 1024 { return Err("Backup exceeds 20MB".into()); }
@@ -200,7 +213,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(updates::UpdateState::default())
-        .invoke_handler(tauri::generate_handler![desktop_settings, desktop_save_backup, updates::desktop_update])
+        .invoke_handler(tauri::generate_handler![desktop_settings, desktop_save_backup, desktop_open_link, updates::desktop_update])
         .setup({ let backend = backend.clone(); move |app| {
             let state = backend.clone();
             let navigation_app = app.handle().clone();
