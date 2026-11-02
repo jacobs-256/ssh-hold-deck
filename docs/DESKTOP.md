@@ -25,6 +25,12 @@ do not copy macOS native dependencies to Windows/Linux or across architectures.
 The preparation script copies the current Node executable, so use the documented
 Node version for reproducible local builds. CI pins that version explicitly.
 
+Desktop preparation prunes dependencies after installation: only the current
+platform's PTY binaries and the browser bundles served by the backend are kept.
+Unused module formats, source maps, tests and PTY build sources are excluded;
+package licenses are retained. Run `npm run desktop:verify` after preparation
+to verify SQLite, PTY execution and every browser vendor resource before bundling.
+
 ## Windows / WSL2
 
 The native Windows application requires an initialized **WSL2 x64** distribution.

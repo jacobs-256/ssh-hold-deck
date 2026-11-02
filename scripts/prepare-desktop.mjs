@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { pruneDesktop } from './prune-desktop.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.join(root, 'desktop/backend');
@@ -19,6 +20,7 @@ await chmod(path.join(output, 'runtime/node'), 0o755);
 execFileSync('npm', ['ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: output, stdio: 'inherit' });
 execFileSync('npm', ['rebuild', 'node-pty'], { cwd: output, stdio: 'inherit' });
 execFileSync(process.execPath, [path.join(output, 'scripts/setup-pty.js')], { cwd: output, stdio: 'inherit' });
+await pruneDesktop(output);
 // Record the exact runtime used to install/build native dependencies.
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 const runtime = await readFile(path.join(output, 'runtime/node'));

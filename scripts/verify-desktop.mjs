@@ -46,7 +46,11 @@ try {
   const base = `http://127.0.0.1:${ready.port}`;
   const response = await fetch(base + '/api/auth/status');
   assert.equal(response.status, 200); assert.equal((await response.json()).configured, false);
-  for (const file of ['/', '/assets/ssh-hold-deck-light.svg', '/dashboard.js', '/vendor/marked.js']) assert.equal((await fetch(base + file)).status, 200);
+  for (const file of ['/', '/assets/ssh-hold-deck-light.svg', '/dashboard.js', '/vendor/marked.js', '/vendor/xterm.js', '/vendor/xterm.css', '/vendor/fit.js', '/vendor/lucide.js', '/vendor/purify.js']) {
+    const asset = await fetch(base + file);
+    assert.equal(asset.status, 200, file);
+    assert((await asset.arrayBuffer()).byteLength > 0, file);
+  }
   child.stdin.end();
   const [code] = await exited; assert.equal(code, 0);
   console.log('Desktop smoke check passed: runtime hash, SQLite, PTY, service, resources and EOF shutdown.');
