@@ -1,6 +1,6 @@
 {
   "name": "ssh-hold-deck",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
     "desktop:prepare": "node scripts/prepare-desktop.mjs",
     "desktop:verify": "node scripts/verify-desktop.mjs",
     "desktop:dev": "tauri dev",
-    "desktop:build": "tauri build",
+    "desktop:build": "node scripts/build-desktop.mjs",
     "release:prepare": "node scripts/prepare-release.mjs"
   },
   "engines": {

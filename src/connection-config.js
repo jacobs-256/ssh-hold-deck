@@ -9,5 +9,5 @@ export function connectionAvailability(config) {
   else if (config.auth === 'password' && !config.password) reason = '请先编辑并保存密码';
   else if (config.auth === 'key' && !config.identity?.trim()) reason = '请先编辑并选择私钥或填写私钥路径';
   else if (!['password', 'key'].includes(config.auth)) reason = '请先编辑并设置认证方式';
-  return { canConnect: !reason, connectDisabledReason: reason };
+  return { canConnect: !reason, connectDisabledReason: reason, hasPassword: config.auth === 'password' && Boolean(config.password) };
 }

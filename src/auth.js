@@ -57,6 +57,14 @@ export function createAuth(db, { now = Date.now } = {}) {
   return {
     session,
     configured: () => Boolean(credential()),
+    async confirmPassword(req, password) {
+      const owner = session(req), record = credential();
+      if (!owner) invalid('请先登录', 401);
+      rateLimit(req);
+      if (!await verify(password, record)) invalid('密码错误', 403);
+      if (session(req) !== owner || credential()?.hash !== record.hash) invalid('登录状态已失效，请重新登录', 401);
+      attempts.delete(req.socket.remoteAddress);
+    },
     async setup(req, res, { password, confirmPassword }) {
       if (credential()) invalid('登录密码已设置，请使用密码登录', 409);
       validatePassword(password, confirmPassword);

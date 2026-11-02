@@ -12,6 +12,19 @@ function fixture() {
 }
 const initial = { password: 'initial-password', confirmPassword: 'initial-password' };
 
+test('secret access confirmation requires the current password and session and rate limits failures', async () => {
+  const {db,auth,req,response}=fixture();
+  try {
+    const res=response();await auth.setup(req(),res,initial);
+    const request=req(res['Set-Cookie'].split(';')[0]);
+    await assert.rejects(auth.confirmPassword(req(),initial.password),/登录/);
+    await assert.rejects(auth.confirmPassword(request,'wrong'),error=>error.status===403);
+    await auth.confirmPassword(request,initial.password);
+    for(let i=0;i<5;i++)await assert.rejects(auth.confirmPassword(request,'wrong'),/密码错误/);
+    await assert.rejects(auth.confirmPassword(request,initial.password),error=>error.status===429);
+  }finally{db.close();}
+});
+
 test('first setup is atomic, hashes passwords, and creates an HttpOnly session', async () => {
   const { db, auth, req, response } = fixture();
   try {

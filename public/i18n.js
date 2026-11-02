@@ -1,5 +1,17 @@
 (() => {
   const english = {
+    'SSH 通道管理与多标签终端': 'SSH channels and tabbed terminals', '报告问题': 'Report an issue', '更新说明': 'Release notes', '下载': 'Download',
+    '软件更新': 'Software update', '检查更新': 'Check for updates', '下载更新': 'Download update',
+    '安装并重启': 'Install and restart', '手动下载': 'Manual download', '下载进度': 'Download progress',
+    '发现新版本': 'New version available', '当前已是最新版本': 'You are up to date',
+    '正在检查更新…': 'Checking for updates…', '正在下载更新…': 'Downloading update…',
+    '正在安装更新…': 'Installing update…', '更新已下载并通过签名验证': 'Update downloaded and signature verified',
+    '当前构建未配置在线更新，请手动下载': 'Online updates are not configured in this build. Download manually.',
+    '更新失败，请重试或手动下载': 'Update failed. Retry or download manually', '请到设置中下载更新': 'Open Settings to download the update',
+    '安装更新将关闭应用和全部 Web 终端，请先保存正在进行的工作。是否安装并重启？': 'Installing closes the app and all web terminals. Save your work first. Install and restart?',
+    '查看通道密码': 'View channel password', '隐藏通道密码': 'Hide channel password', '未保存通道密码': 'No saved channel password',
+    '隐藏 Key Secret': 'Hide Key Secret',
+    '查看 Key Secret': 'View Key Secret', '当前登录密码': 'Current login password', '验证并查看': 'Verify and reveal',
     '配置备份':'Configuration backup', '备份密码':'Backup password', '备份密码（至少 8 个字符）':'Backup password (at least 8 characters)',
     '导出配置':'Export settings', '导入配置':'Import settings',
     '导出全部配置、通道及连接凭据为加密文件。导入会覆盖当前配置，端口配置在下次启动时生效。':'Export all settings, channels and connection credentials to an encrypted file. Import replaces current settings. Port settings take effect on the next start.',

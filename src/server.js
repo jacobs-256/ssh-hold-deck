@@ -363,6 +363,13 @@ const requestHandler = async (req, res) => {
       const client = new JumpServerClient(config);
       return json(res, 200, url.pathname.endsWith('/organizations') ? { organizations: await client.organizations() } : await client.test());
     }
+    const secretMatch = url.pathname.match(/^\/api\/jumpservers\/([0-9a-f-]+)\/secret$/i);
+    if (secretMatch && req.method === 'POST') {
+      if (!validOrigin(req, true)) return json(res, 403, { error: '请求来源无效' });
+      const { password } = await readBody(req);
+      await auth.confirmPassword(req, password);
+      return json(res, 200, { keySecret: jumpServer(secretMatch[1]).keySecret });
+    }
     const jmsMatch = url.pathname.match(/^\/api\/jumpservers\/([0-9a-f-]+)(?:\/(assets)(?:\/([0-9a-f-]+))?)?$/i);
     if (jmsMatch) {
       const [, id, assets, assetId] = jmsMatch;
@@ -412,6 +419,15 @@ const requestHandler = async (req, res) => {
       if (!r.ok) return json(res, 400, { error: r.stderr || r.stdout || '连接失败' });
       saveChannel(b.name, config);
       return json(res, 201, { ok: true, channel: await channelResult(b.name, config) });
+    }
+    const passwordMatch = url.pathname.match(/^\/api\/channels\/([A-Za-z0-9._-]+)\/password$/);
+    if (passwordMatch && req.method === 'POST') {
+      if (!validOrigin(req, true)) return json(res, 403, { error: '请求来源无效' });
+      const { password } = await readBody(req);
+      await auth.confirmPassword(req, password);
+      const config = (await loadVault())[passwordMatch[1]];
+      if (!config || config.source === 'jumpserver' || config.auth !== 'password' || !config.password) return json(res, 404, { error: '未保存通道密码' });
+      return json(res, 200, { password: config.password });
     }
     const match = url.pathname.match(/^\/api\/channels\/([^/]+)$/); if (match) { const name = decodeURIComponent(match[1]);
       if (!/^[A-Za-z0-9._-]+$/.test(name)) return json(res, 400, { error: '通道名无效' });

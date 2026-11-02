@@ -1,5 +1,7 @@
 (() => {
   document.body.classList.add('ui-aligned');
+  document.querySelector('.sidebar .logo small')?.remove();
+  document.querySelector('main>header p')?.remove();
   const textScales={small:0.9,default:1,large:1.1,xlarge:1.2};
   let textSize='default';
   try {const saved=localStorage.getItem('ssh-hold-text-size');if(Object.hasOwn(textScales,saved))textSize=saved;} catch {}
@@ -60,7 +62,11 @@
   }
   document.querySelector('#refresh').innerHTML = icon('refresh-cw');
   document.querySelector('#refresh').setAttribute('aria-label', I18n.t('刷新'));
-  document.querySelector('#add').innerHTML = `${icon('plus')}<span>${I18n.t('添加通道')}</span>`;
+  const addButton = document.querySelector('#add');
+  addButton.innerHTML = icon('plus');
+  addButton.classList.add('square');
+  addButton.title = I18n.t('添加通道');
+  addButton.setAttribute('aria-label', addButton.title);
   document.querySelector('#modal .close').innerHTML = icon('x');
   document.querySelector('#modal .close').setAttribute('aria-label', I18n.t('关闭'));
   lucide.createIcons();
@@ -171,7 +177,7 @@
       try { await call('/api/auth/logout', {}); location.reload(); } catch (e) { await window.showMessage(e.message); }
     };
     const preferences = document.createElement('section'); preferences.className = 'preferences-page'; preferences.hidden = true;
-    preferences.innerHTML = I18n.html(`<div class="preferences-heading"><h1><i data-lucide="settings"></i>设置</h1></div><section class="preferences-section"><h2>外观</h2><div class="preference-row"><h3>主题</h3><div class="theme-options"></div></div><div class="preference-row"><h3>语言</h3><div class="locale-options"></div></div></section><section class="preferences-section"><h2>通道管理</h2><div class="preference-row"><h3>刷新设置</h3><button type="button" class="secondary" data-setting="refresh"><i data-lucide="timer"></i>刷新设置</button></div></section><section class="preferences-section"><h2>账户</h2><div class="preference-row"><h3>修改密码</h3><button type="button" class="secondary" data-setting="password"><i data-lucide="key-round"></i>修改密码</button></div><div class="preference-row"><h3>退出登录</h3><button type="button" class="secondary danger" data-setting="logout"><i data-lucide="log-out"></i>退出登录</button></div></section><div class="preferences-version">SSH Hold Deck <span>v1.0.0</span></div>`);
+    preferences.innerHTML = I18n.html(`<div class="preferences-heading"><h1><i data-lucide="settings"></i>设置</h1></div><section class="preferences-section"><h2>外观</h2><div class="preference-row"><h3>主题</h3><div class="theme-options"></div></div><div class="preference-row"><h3>语言</h3><div class="locale-options"></div></div></section><section class="preferences-section"><h2>通道管理</h2><div class="preference-row"><h3>刷新设置</h3><button type="button" class="secondary" data-setting="refresh"><i data-lucide="timer"></i>刷新设置</button></div></section><section class="preferences-section"><h2>账户</h2><div class="preference-row"><h3>修改密码</h3><button type="button" class="secondary" data-setting="password"><i data-lucide="key-round"></i>修改密码</button></div><div class="preference-row"><h3>退出登录</h3><button type="button" class="secondary danger" data-setting="logout"><i data-lucide="log-out"></i>退出登录</button></div></section><div class="preferences-version">SSH Hold Deck <span>v1.1.0</span></div>`);
     document.querySelector('main').append(preferences);
     const textRow=document.createElement('div');textRow.className='preference-row';
     textRow.innerHTML=I18n.html(`<h3>文字大小</h3><div class="text-size-options" role="group" aria-label="文字大小">${[['small','小'],['default','默认'],['large','大'],['xlarge','特大']].map(([value,label],index)=>`<button type="button" data-text-size="${value}" aria-pressed="${textSize===value}"><i data-lucide="type" aria-hidden="true" style="width:${12+index*2}px;height:${12+index*2}px"></i><span>${label}</span></button>`).join('')}</div>`);
@@ -336,12 +342,78 @@
       } catch (error) { notifyService(error instanceof SyntaxError ? I18n.t('备份文件格式无效') : error.message, true); lockBackup(false); }
     };
     let serviceBusy=false;
+    const updateRow = preferences.querySelector('.preferences-version');
+    updateRow.className = 'preferences-about';
+    updateRow.innerHTML = I18n.html('<div class="about-identity"><img src="/assets/ssh-hold-deck-icon.svg" width="44" height="44" alt=""><div class="setting-copy"><h3>SSH Hold Deck <span class="update-version">v1.1.0</span></h3><p>SSH 通道管理与多标签终端</p><p class="update-feedback" role="status" aria-live="polite"></p><progress hidden aria-label="下载进度"></progress></div></div><div class="about-actions"><button type="button" class="secondary" data-update="check" hidden><i data-lucide="refresh-cw"></i>检查更新</button><button type="button" class="primary" data-update="download" hidden><i data-lucide="download"></i>下载更新</button><button type="button" class="primary" data-update="install" hidden><i data-lucide="rotate-cw"></i>安装并重启</button><a class="secondary about-download" href="https://github.com/jacobs-256/ssh-hold-deck/releases/latest" target="_blank" rel="noopener noreferrer"><i data-lucide="external-link"></i>下载</a><a class="secondary" href="https://github.com/jacobs-256/ssh-hold-deck/issues" target="_blank" rel="noopener noreferrer"><i data-lucide="bug"></i>报告问题</a><a class="secondary" href="https://github.com/jacobs-256/ssh-hold-deck" target="_blank" rel="noopener noreferrer"><i data-lucide="git-fork"></i>GitHub</a></div><details class="about-release-notes" hidden><summary>更新说明</summary><pre class="update-notes"></pre></details>');
+    updateRow.querySelector('.about-download').hidden = true;
     if (window.__TAURI__?.core?.invoke) {
       const invoke = window.__TAURI__.core.invoke;
+      const updateFeedback = updateRow.querySelector('.update-feedback');
+      updateRow.querySelector('[data-update="check"]').hidden = false;
+      const updateProgress = updateRow.querySelector('progress');
+      let updateBusy = false;
+      const renderUpdate = status => {
+        updateRow.querySelector('.update-version').textContent = `v${status.currentVersion}`;
+        updateRow.querySelector('[data-update="check"]').hidden = ['available', 'downloading', 'ready'].includes(status.phase);
+        updateRow.querySelector('[data-update="download"]').hidden = status.phase !== 'available';
+        updateRow.querySelector('[data-update="install"]').hidden = status.phase !== 'ready';
+        const notes = updateRow.querySelector('.update-notes');
+        notes.textContent = status.notes || '';
+        updateRow.querySelector('.about-release-notes').hidden = !status.notes;
+        updateProgress.hidden = status.phase !== 'downloading';
+        if (status.total) { updateProgress.max = status.total; updateProgress.value = status.downloaded; }
+        else updateProgress.removeAttribute('value');
+        const messages = { available: '发现新版本', current: '当前已是最新版本', downloading: '正在下载更新…', ready: '更新已下载并通过签名验证' };
+        updateFeedback.textContent = I18n.t(!status.configured ? '当前构建未配置在线更新，请手动下载' : messages[status.phase] || '');
+        if (status.phase === 'available' && status.version) updateFeedback.textContent += ` v${status.version}`;
+        updateFeedback.classList.toggle('update-available', status.phase === 'available');
+        updateRow.querySelector('.about-download').hidden = !['available', 'ready'].includes(status.phase);
+        updateRow.querySelectorAll('button').forEach(button => { button.disabled = updateBusy || !status.configured; });
+      };
+      const runUpdate = async (action, automatic = false) => {
+        if (updateBusy) return;
+        if (action === 'install' && !await window.showMessage(I18n.t('安装更新将关闭应用和全部 Web 终端，请先保存正在进行的工作。是否安装并重启？'), true)) return;
+        updateBusy = true;
+        updateRow.querySelectorAll('button').forEach(button => { button.disabled = true; });
+        updateFeedback.textContent = I18n.t(action === 'check' ? '正在检查更新…' : action === 'download' ? '正在下载更新…' : '正在安装更新…');
+        let polling = false;
+        const timer = action === 'download' ? setInterval(async () => {
+          if (polling) return;
+          polling = true;
+          try { renderUpdate(await invoke('desktop_update', { action: 'status' })); } catch {} finally { polling = false; }
+        }, 500) : null;
+        try {
+          const status = await invoke('desktop_update', { action });
+          updateBusy = false; renderUpdate(status);
+          if (action === 'check') {
+            try { localStorage.setItem('ssh-hold-update-checked', String(Date.now())); } catch {}
+            if (automatic && status.phase === 'available') await window.showMessage(`${I18n.t('发现新版本')} v${status.version}。${I18n.t('请到设置中下载更新')}`);
+          }
+        } catch (error) {
+          updateBusy = false;
+          try { renderUpdate(await invoke('desktop_update', { action: 'status' })); } catch {}
+          updateFeedback.textContent = `${I18n.t('更新失败，请重试或手动下载')}: ${String(error)}`;
+        } finally { if (timer) clearInterval(timer); }
+      };
+      updateRow.addEventListener('click', event => {
+        const button = event.target.closest('[data-update]');
+        if (button) runUpdate(button.dataset.update);
+      });
+      invoke('desktop_update', { action: 'status' }).then(status => {
+        renderUpdate(status);
+        let lastCheck = 0;
+        try { lastCheck = Number(localStorage.getItem('ssh-hold-update-checked')) || 0; } catch {}
+        if (status.configured && Date.now() - lastCheck > 86400000) setTimeout(() => runUpdate('check', true), 5000);
+      }).catch(error => { updateFeedback.textContent = String(error); });
       const desktopRows = document.createElement('div');
       desktopRows.style.display = 'contents';
       desktopRows.innerHTML = I18n.html('<div class="preference-row"><div class="setting-copy"><h3>关闭行为</h3><p>选择点击窗口关闭按钮后的应用行为。</p></div><div class="desktop-close-options theme-options" role="group" aria-label="关闭行为"><button type="button" class="secondary" data-close="ask">每次询问</button><button type="button" class="secondary" data-close="tray">最小化到托盘</button><button type="button" class="secondary" data-close="quit">退出应用</button></div></div><div class="preference-row"><div class="setting-copy"><h3>托盘图标</h3><p>在系统托盘中显示图标，便于快速执行显示和退出操作。</p></div><label class="service-switch"><input type="checkbox" role="switch" aria-label="托盘图标"><span aria-hidden="true"></span></label></div>');
       const trayToggle = desktopRows.querySelector('input');
+      const desktopFeedback = document.createElement('p');
+      desktopFeedback.setAttribute('role', 'status');
+      desktopFeedback.hidden = true;
+      serviceSection.querySelector('.settings-group').append(desktopRows, desktopFeedback);
+      desktopRows.querySelectorAll('button,input').forEach(control => { control.disabled = true; });
       let desktopSettings;
       const syncDesktop = () => {
         trayToggle.checked = desktopSettings.trayEnabled;
@@ -363,8 +435,10 @@
       trayToggle.onchange = () => saveDesktop({ ...desktopSettings, trayEnabled: trayToggle.checked,
         closeBehavior: !trayToggle.checked && desktopSettings.closeBehavior === 'tray' ? 'ask' : desktopSettings.closeBehavior });
       invoke('desktop_settings', { settings: null }).then(settings => {
-        desktopSettings = settings; syncDesktop(); serviceSection.querySelector('.settings-group').append(desktopRows);
-      }).catch(error => notifyService(String(error), true));
+        desktopSettings = settings;
+        desktopRows.querySelectorAll('button,input').forEach(control => { control.disabled = false; });
+        syncDesktop();
+      }).catch(error => { desktopFeedback.textContent = String(error); desktopFeedback.hidden = false; });
     }
     const lockService=locked=>{serviceBusy=locked;serviceForm.querySelectorAll('input,button').forEach(item=>item.disabled=locked);autoPort.disabled=locked;};
     async function loadService() {

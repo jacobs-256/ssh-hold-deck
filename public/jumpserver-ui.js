@@ -114,6 +114,29 @@ function createJumpServerUI({ api, showMessage, changed }) {
   document.body.append(dialog);
   const settingsForm = dialog.querySelector('form'), status = dialog.querySelector('.settings-status');
   let settingsBusy = false;
+  const secretInput=settingsForm.elements.keySecret;
+  const secretControls=document.createElement('div');secretControls.className='secret-controls';secretInput.before(secretControls);secretControls.append(secretInput);
+  const eye=document.createElement('button');eye.type='button';eye.className='icon-button';eye.hidden=true;eye.title=I18n.t('查看 Key Secret');eye.setAttribute('aria-label',eye.title);eye.innerHTML='<i data-lucide="eye"></i>';secretControls.append(eye);
+  const reveal=document.createElement('dialog');reveal.id='secret-reveal-dialog';
+  reveal.innerHTML=I18n.html('<form><div class="modal-head"><h2>查看 Key Secret</h2><button type="button" class="close" aria-label="关闭">×</button></div><label>当前登录密码<input name="password" type="password" autocomplete="current-password" required maxlength="256"></label><label class="revealed-secret" hidden>Key Secret<input readonly autocomplete="off" spellcheck="false"></label><p class="error" role="alert"></p><div class="actions"><button type="button" class="secondary">关闭</button><button type="submit" class="primary">验证并查看</button></div></form>');document.body.append(reveal);
+  reveal.querySelector('.revealed-secret').remove();
+  const revealForm=reveal.querySelector('form');let revealBusy=false,revealVersion=0,verifiedSecret=null,secretVisible=false;
+  function clearReveal(){revealVersion++;revealForm.reset();reveal.querySelector('.error').textContent='';}
+  function updateEye(){secretInput.type=secretVisible?'text':'password';eye.innerHTML=`<i data-lucide="${secretVisible?'eye-off':'eye'}"></i>`;eye.title=I18n.t(secretVisible?'隐藏 Key Secret':'查看 Key Secret');eye.setAttribute('aria-label',eye.title);eye.setAttribute('aria-pressed',String(secretVisible));lucide.createIcons();}
+  function resetSecret(){verifiedSecret=null;secretVisible=false;secretInput.value='';clearReveal();updateEye();}
+  eye.onclick=()=>{if(verifiedSecret!==null){secretVisible=!secretVisible;if(secretVisible&&!secretInput.value)secretInput.value=verifiedSecret;updateEye();return;}clearReveal();reveal.showModal();lucide.createIcons();revealForm.elements.password.focus();};
+  reveal.querySelectorAll('.close,.secondary').forEach(button=>button.onclick=()=>{clearReveal();reveal.close();});
+  reveal.addEventListener('cancel',clearReveal);
+  reveal.addEventListener('close',clearReveal);
+  dialog.addEventListener('close',()=>{reveal.close();resetSecret();});
+  revealForm.onsubmit=async event=>{
+    event.preventDefault();if(revealBusy)return;revealBusy=true;const version=revealVersion,id=settingsForm.elements.saved.value,submit=revealForm.querySelector('[type=submit]');submit.disabled=true;reveal.querySelector('.error').textContent='';
+    try{const result=await api(`/api/jumpservers/${encodeURIComponent(id)}/secret`,{method:'POST',body:JSON.stringify({password:revealForm.elements.password.value})});
+      if(version!==revealVersion||!reveal.open||id!==settingsForm.elements.saved.value)return;
+      verifiedSecret=result.keySecret;secretInput.value=verifiedSecret;secretVisible=true;updateEye();reveal.close();
+    }catch(error){if(version===revealVersion)reveal.querySelector('.error').textContent=error.message;}
+    finally{revealForm.elements.password.value='';revealBusy=false;submit.disabled=false;}
+  };
   let organizationRequest = 0, organizationsLoading = false, organizationDebounce;
   const orgSelect = settingsForm.elements.orgId;
   async function loadOrganizations(preferred = orgSelect.value) {
@@ -145,8 +168,9 @@ function createJumpServerUI({ api, showMessage, changed }) {
     settingsForm.reset(); settingsForm.elements.saved.value = id;
     for (const field of ['name', 'url', 'keyId', 'sshHost', 'sshPort']) if (config) settingsForm.elements[field].value = config[field];
     settingsForm.elements.keySecret.value = '';
+    eye.hidden=!config?.hasSecret;resetSecret();
     settingsForm.elements.keySecret.required = !config;
-    settingsForm.elements.keySecret.placeholder = config ? I18n.t('已保存；留空保留原密钥') : '';
+    settingsForm.elements.keySecret.placeholder = config?.hasSecret ? '****************' : '';
     dialog.querySelector('[data-action=delete]').disabled = !config;
     status.textContent = ''; status.classList.remove('success');
     loadOrganizations(config?.orgId || '');
@@ -173,7 +197,7 @@ function createJumpServerUI({ api, showMessage, changed }) {
   dialog.querySelector('[data-action=close]').onclick = () => dialog.close();
   dialog.addEventListener('cancel', event => { if (settingsBusy) event.preventDefault(); });
   dialog.addEventListener('close', () => { clearTimeout(organizationDebounce); organizationRequest++; organizationsLoading = false; settingsForm.elements.keySecret.value = ''; settingsButton.setAttribute('aria-expanded', 'false'); });
-  function settingsPayload() { const payload = Object.fromEntries(new FormData(settingsForm)); payload.id = payload.saved; delete payload.saved; return payload; }
+  function settingsPayload() { const payload = Object.fromEntries(new FormData(settingsForm)); if(verifiedSecret!==null&&payload.keySecret===verifiedSecret)payload.keySecret='';payload.id = payload.saved; delete payload.saved; return payload; }
   async function settingsAction(action) {
     if (action !== 'delete' && organizationsLoading) { status.textContent = I18n.t('正在读取组织，请稍候'); return; }
     if (settingsBusy || action !== 'delete' && !settingsForm.reportValidity()) return;
@@ -192,6 +216,7 @@ function createJumpServerUI({ api, showMessage, changed }) {
         await refreshServers(result.server?.id);
         settingsOptions(result.server?.id || '');
         status.textContent = action === 'delete' ? I18n.t('配置已删除') : I18n.t('配置已保存'); status.classList.add('success');
+        if (action === 'save') dialog.close();
         if (document.querySelector('#modal').open && source.value === 'jumpserver') { offset = 0; await searchAssets(); }
       }
     } catch (e) { status.textContent = e.message; }

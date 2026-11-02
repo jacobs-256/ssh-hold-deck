@@ -23,3 +23,29 @@ await copyFile(installers[0], path.join('dist-desktop', name));
 const sha = createHash('sha256').update(await readFile(installers[0])).digest('hex');
 await writeFile(path.join('dist-desktop', name + '.sha256'), `${sha}  ${name}\n`);
 console.log(name);
+
+const updateSource = label.startsWith('macos') ? path.resolve('src-tauri/target/release/bundle/macos') : source;
+const updateExtension = label.startsWith('macos') ? '.app.tar.gz' : '.exe';
+async function findUpdate(root) {
+  const found = [];
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const file = path.join(root, entry.name);
+    if (entry.isDirectory()) found.push(...await findUpdate(file));
+    else if (entry.name.endsWith(updateExtension + '.sig')) found.push(file.slice(0, -4));
+  }
+  return found;
+}
+const updates = await findUpdate(updateSource);
+if (updates.length !== 1) throw Error(`Expected one signed updater for ${label}, found ${updates.length}`);
+const updateName = label.startsWith('macos') ? `SSH-Hold-Deck_${pkg.version}_${label}.app.tar.gz` : name;
+await copyFile(updates[0], path.join('dist-desktop', updateName));
+await copyFile(updates[0] + '.sig', path.join('dist-desktop', updateName + '.sig'));
+if (label.startsWith('macos')) {
+  const hash = createHash('sha256').update(await readFile(updates[0])).digest('hex');
+  await writeFile(path.join('dist-desktop', updateName + '.sha256'), `${hash}  ${updateName}\n`);
+}
+const platform = { 'macos-arm64': 'darwin-aarch64', 'macos-x64': 'darwin-x86_64', 'windows-x64': 'windows-x86_64' }[label];
+await writeFile(path.join('dist-desktop', `update-${label}.json`), JSON.stringify({
+  version: pkg.version, platform, filename: updateName,
+  signature: (await readFile(updates[0] + '.sig', 'utf8')).trim(),
+}, null, 2));

@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod updates;
+
 use std::{
     io::{BufRead, BufReader},
     path::PathBuf,
@@ -196,7 +198,9 @@ fn main() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![desktop_settings, desktop_save_backup])
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updates::UpdateState::default())
+        .invoke_handler(tauri::generate_handler![desktop_settings, desktop_save_backup, updates::desktop_update])
         .setup({ let backend = backend.clone(); move |app| {
             let state = backend.clone();
             let navigation_app = app.handle().clone();

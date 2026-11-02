@@ -118,6 +118,16 @@ html[data-theme=dark] .pagination :is(input,button){background:#1c2939;color:#c5
 .table-scroll-control input::-webkit-slider-thumb{appearance:none;width:56px;height:12px;border:1px solid #91a8ae;border-radius:4px;background:#aabdc2;cursor:ew-resize}
 .table-scroll-control input::-moz-range-thumb{width:56px;height:12px;border:1px solid #91a8ae;border-radius:4px;background:#aabdc2;cursor:ew-resize}
 .table-scroll-control input:focus-visible{outline:2px solid #10aa9d;outline-offset:3px}
+.workspace>footer{gap:12px;flex-wrap:wrap;height:auto;min-height:48px;padding:8px 0}
+.table-statistics{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;min-width:0}
+.table-statistics #result-count{white-space:nowrap}
+.table-statistics .summary{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;margin:0}
+.table-statistics .summary div{display:flex;align-items:center;gap:5px;padding:0;border:0;border-radius:0;background:transparent}
+.table-statistics .summary span{display:inline;margin:0;font-size:11px;white-space:nowrap;color:var(--muted)}
+.table-statistics .summary strong{font-size:12px;line-height:18px;color:inherit;font-weight:600}
+.table-statistics .summary #up{color:#15926d}
+html[data-theme=dark] .table-statistics .summary #up{color:#55d8b4}
+.workspace>footer>.pagination{margin-left:auto}
 html[data-theme=dark] .table-scroll-control{background:#0b1422}
 html[data-theme=dark] .table-scroll-control input{background:#304052}
 .table-wrap th:nth-child(9),.table-wrap td:nth-child(9){position:sticky;right:0;z-index:2;background:#fff;box-shadow:-5px 0 8px #173c3a0a;border-left:1px solid var(--line)}

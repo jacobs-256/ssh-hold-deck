@@ -73,8 +73,13 @@ includes `NSLocalNetworkUsageDescription`; it cannot override a denied permissio
 
 The desktop service binds only to `127.0.0.1`, initially using a free port.
 The window follows backend readiness and permits navigation only to its current
-service origin; external HTTP(S) links open in the system browser. Remote pages
-have no Tauri capabilities. Existing web authentication remains enabled.
+service origin; external HTTP(S) links open in the system browser. The main
+window's loopback origin has explicit permission for `desktop_settings` and
+`desktop_save_backup`; both commands also verify the current backend port in
+Rust. External pages have no Tauri capabilities. Existing web authentication
+remains enabled. Keep these commands in the build-time app manifest and the
+`desktop-settings` capability: an empty permission list prevents desktop settings
+from loading in packaged applications.
 
 On macOS data lives in
 `~/Library/Application Support/com.jacobs256.sshholddeck/data/`.
@@ -99,7 +104,8 @@ Do not commit generated backend resources, installer outputs or local data.
    tag and pushes it. An existing tag is reused without moving it.
 5. All checks and three platform builds must pass before the workflow creates
    the GitHub Release with generated notes and attaches the two DMGs, Windows
-   NSIS EXE and `SHA256SUMS.txt`. An existing Release receives updated assets.
+   NSIS EXE, signed update archives, `latest.json` and `SHA256SUMS.txt`. An existing
+   Release receives updated assets. Updater signing setup below is required.
 
 Alternatively, push a matching `v*` tag to trigger the same workflow directly.
 Publishing a Release manually remains supported. All build jobs use the exact
@@ -126,7 +132,8 @@ signature can use a different identifier from the permission shown in Settings.
 The release workflow verifies the final application signature and identifier.
 These are still **test installers without trusted publisher signing**. They
 can trigger macOS Gatekeeper or Windows SmartScreen. This implementation does not
-claim publicly trusted signing or application auto-updates.
+claim publicly trusted publisher signing. Updater signatures are configured
+separately as described below.
 
 For macOS Developer ID signing/notarization, configure Tauri-supported repository
 Secrets: `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`,
@@ -175,6 +182,62 @@ secrets as a complete set rather than leaving an invalid certificate configured.
 
 Windows code signing is not configured yet. Add the selected certificate/signing
 service configuration before distributing trusted Windows installers.
+
+## Online Updates via GitHub Releases
+
+Desktop settings include a software update row with manual checks, release notes,
+download progress, verified-download status and an explicit install/restart button.
+An automatic check runs after login at most once per successful check per day.
+Installation asks the user to save work because web terminals and the backend
+will close. SSH master connections are not intentionally stopped. The updater
+uses the same backend-origin validation as other desktop commands; the web app
+does not expose an HTTP update endpoint or direct updater plugin permissions.
+
+The stable endpoint is:
+`https://github.com/jacobs-256/ssh-hold-deck/releases/latest/download/latest.json`.
+GitHub's latest endpoint excludes prereleases. A build without an updater public
+key offers manual download and disables online update actions. Existing versions
+without this feature must be upgraded manually once.
+
+### One-time Signing Setup
+
+Generate an updater key pair outside the checkout and back up the private key:
+
+```sh
+npx tauri signer generate -w "$HOME/.ssh/ssh-hold-deck-updater.key"
+```
+
+Configure the GitHub repository (or the `release` environment used by build jobs):
+
+| Type | Name | Value |
+| --- | --- | --- |
+| Actions variable | `TAURI_UPDATER_PUBLIC_KEY` | Complete contents of the generated `.pub` file |
+| Actions secret | `TAURI_SIGNING_PRIVATE_KEY` | Complete contents of the generated private key file |
+| Actions secret | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Password used when generating the key, if any |
+
+The public key is embedded at Rust compile time. For a local signed build, export
+these three environment variables before `npm run desktop:build`. Keep using the
+same public key in both the CLI configuration and the compiled Rust updater;
+the build wrapper supplies this automatically. Without a public key, local
+builds skip updater artifacts and remain installable manually. Keep using the
+same key pair across releases; replacing the public key breaks updates from
+installed clients that trust the previous key. Updater signing is independent of
+Apple Developer ID / notarization and Windows publisher signing.
+
+Release builds require both the public key and private key. Tauri creates signed
+`.app.tar.gz` macOS updates and signed Windows NSIS installers. Collection records
+the actual artifact name and signature for each architecture. Publication checks
+all three artifacts, creates `latest.json` with release notes, uploads packages
+before the manifest, and publishes a new draft only after all uploads succeed.
+Existing published releases receive assets and the manifest last; avoid changing
+artifacts of a version already installed by users. Publish a new version instead.
+
+Configuration changes, the updater source and scripts must be committed before
+creating the release tag. An old tag still builds its old sources and cannot gain
+the updater from a newer workflow alone. After setup, publish a new version,
+install it manually, then publish a higher version to verify the complete update
+flow on macOS and Windows. GitHub connectivity errors retain the manual-download
+link and allow retrying. Database and key files stay in the separate data folder.
 
 ## Verification Status
 
