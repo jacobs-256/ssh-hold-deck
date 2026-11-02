@@ -1,4 +1,5 @@
 import { connectionAvailability } from './connection-config.js';
+import { platformCommand, parsePlatform } from './platform-info.js';
 import { backupLimit, encodeBackup, decodeBackup } from './backup.js';
 import { createAgentSkills } from './agent-skills.js';
 import { jumpOptions } from './jump.js';
@@ -59,7 +60,7 @@ async function loadVault() { return Object.fromEntries(db.prepare('SELECT name, 
 function loadJumpServers() { const row = db.prepare("SELECT value FROM settings WHERE key = 'jumpservers'").get(); return row ? decrypt(row.value).servers || [] : []; }
 function saveJumpServers(servers) { db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('jumpservers', encrypt({ servers })); }
 function jumpServer(id) { const server = loadJumpServers().find(s => s.id === id); if (!server) throw new Error('JumpServer 配置不存在，请先配置堡垒机'); return server; }
-function displayChannel(config) { return { source: config.source || 'manual', serverId: config.serverId, assetId: config.assetId, assetName: config.assetName, assetAddress: config.assetAddress, account: config.account, accountUsername: config.accountUsername, serverName: config.source === 'jumpserver' ? loadJumpServers().find(s => s.id === config.serverId)?.name || '配置已移除' : '' }; }
+function displayChannel(config) { return { operatingSystem: config.operatingSystem || '', architecture: config.architecture || '', source: config.source || 'manual', serverId: config.serverId, assetId: config.assetId, assetName: config.assetName, assetAddress: config.assetAddress, account: config.account, accountUsername: config.accountUsername, serverName: config.source === 'jumpserver' ? loadJumpServers().find(s => s.id === config.serverId)?.name || '配置已移除' : '' }; }
 async function channelConfig(input, previous = {}) {
   if (input.source === 'jumpserver') return new JumpServerClient(jumpServer(input.serverId)).channel(input);
   if (input.source && input.source !== 'manual') throw new Error('连接来源无效');
@@ -70,6 +71,27 @@ async function channelConfig(input, previous = {}) {
 }
 const channelOperations = new Set();
 function saveChannel(name, config) { db.prepare('INSERT OR REPLACE INTO channels (name, config) VALUES (?, ?)').run(name, encrypt(config)); }
+const platformProbes = new Set();
+const platformAttempts = new Map();
+async function collectPlatform(name) {
+  if (platformProbes.has(name)) return;
+  const row = db.prepare('SELECT config FROM channels WHERE name = ?').get(name);
+  if (!row) return;
+  const config = decrypt(row.config);
+  if (config.operatingSystem && config.architecture) return;
+  if (Date.now() - (platformAttempts.get(name) || 0) < 60000) return;
+  platformAttempts.set(name, Date.now()); platformProbes.add(name);
+  try {
+    const result = await run(['run', name, '--', platformCommand]);
+    if (!result.ok) return;
+    const info = parsePlatform(result.stdout);
+    if (!info.operatingSystem && !info.architecture) return;
+    // Discard a probe if the channel was edited or deleted while it ran.
+    if (db.prepare('SELECT config FROM channels WHERE name = ?').get(name)?.config !== row.config) return;
+    saveChannel(name, { ...config, operatingSystem: info.operatingSystem || config.operatingSystem || '', architecture: info.architecture || config.architecture || '' });
+    await publishChannels();
+  } finally { platformProbes.delete(name); }
+}
 async function saveVault(v) {
   db.exec('BEGIN IMMEDIATE');
   try {
@@ -146,6 +168,7 @@ function refreshStatuses() {
       delete previous.checkedAt;
       if (JSON.stringify(previous) !== JSON.stringify(snapshot)) changed = true;
       update.run(row.name, JSON.stringify({ ...snapshot, checkedAt: new Date().toISOString() }));
+      if (snapshot.status === '畅通') void collectPlatform(row.name).catch(() => {});
     }
     if (changed) await publishChannels();
   })().finally(() => { statusRefresh = undefined; });
@@ -179,6 +202,7 @@ async function startChannel(config, resolved, session) {
   return result;
 }
 async function channelResult(name, config) {
+  void collectPlatform(name).catch(() => {});
   const result = await run(['status', name]);
   const current = parseList(result.stdout)[0] || { name, status: '畅通' };
   db.prepare('INSERT OR REPLACE INTO channel_status (name, snapshot) VALUES (?, ?)').run(name, JSON.stringify({ ...current, checkedAt: new Date().toISOString() }));

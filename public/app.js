@@ -1,9 +1,27 @@
 const $=s=>document.querySelector(s);let data=[];let editing=null;const connecting=new Set();
+const platformTooltip=document.createElement('div');platformTooltip.id='platform-tooltip';platformTooltip.className='platform-tooltip';platformTooltip.setAttribute('role','tooltip');platformTooltip.hidden=true;document.body.append(platformTooltip);
+let tooltipAnchor;
+function hidePlatformTooltip(){tooltipAnchor?.removeAttribute('aria-describedby');tooltipAnchor=null;platformTooltip.hidden=true;}
+function showPlatformTooltip(anchor){
+  hidePlatformTooltip();tooltipAnchor=anchor;
+  const system=document.createElement('strong');system.textContent=anchor.dataset.system||I18n.t('未知');
+  const architecture=document.createElement('span');architecture.textContent=anchor.dataset.architecture||'—';
+  platformTooltip.replaceChildren(system,architecture);platformTooltip.hidden=false;anchor.setAttribute('aria-describedby',platformTooltip.id);
+  const rect=anchor.getBoundingClientRect(),tip=platformTooltip.getBoundingClientRect();
+  platformTooltip.style.left=`${Math.max(8,Math.min(innerWidth-tip.width-8,rect.left+rect.width/2-tip.width/2))}px`;
+  platformTooltip.style.top=`${rect.top>=tip.height+14?rect.top-tip.height-8:Math.min(innerHeight-tip.height-8,rect.bottom+8)}px`;
+}
+document.addEventListener('pointerover',event=>{const anchor=event.target.closest('.channel-platform');if(anchor&&anchor!==tooltipAnchor)showPlatformTooltip(anchor);});
+document.addEventListener('pointerout',event=>{if(tooltipAnchor?.contains(event.target)&&!tooltipAnchor.contains(event.relatedTarget))hidePlatformTooltip();});
+document.addEventListener('focusin',event=>{if(event.target.matches('.channel-platform'))showPlatformTooltip(event.target);});
+document.addEventListener('focusout',event=>{if(event.target===tooltipAnchor)hidePlatformTooltip();});
+document.addEventListener('keydown',event=>{if(event.key==='Escape')hidePlatformTooltip();});
+document.addEventListener('scroll',hidePlatformTooltip,true);window.addEventListener('resize',hidePlatformTooltip);
 const channelEvents=new EventSource('/api/channels/events');
 channelEvents.addEventListener('channels',event=>{
   const incoming=JSON.parse(event.data),names=new Set(incoming.map(channel=>channel.name));
   const comparable=({checkedAt,...channel})=>JSON.stringify(channel);
-  for(const channel of incoming){if(connecting.has(channel.name))continue;const previous=data.find(row=>row.name===channel.name);if(!previous||comparable(previous)!==comparable(channel))updateChannel(channel);}
+  for(const channel of incoming){const previous=data.find(row=>row.name===channel.name);if(connecting.has(channel.name)){if(previous&&(channel.operatingSystem||channel.architecture))updateChannel({...previous,operatingSystem:channel.operatingSystem,architecture:channel.architecture});continue;}if(!previous||comparable(previous)!==comparable(channel))updateChannel(channel);}
   if(data.some(channel=>!names.has(channel.name)&&!connecting.has(channel.name))){data=data.filter(channel=>names.has(channel.name)||connecting.has(channel.name));render();}
 });
 window.addEventListener('beforeunload',()=>channelEvents.close());
@@ -86,6 +104,7 @@ pagination.querySelectorAll('button').forEach(button=>button.onclick=()=>goToPag
 pagination.querySelector('input').onchange=event=>goToPage(Number.isInteger(Number(event.target.value))?Number(event.target.value):currentPage);
 pagination.querySelector('select').onchange=event=>{pageSize=Number(event.target.value);try{localStorage.setItem('channelPageSize',String(pageSize));}catch{}goToPage(1);};
 function render(){
+  hidePlatformTooltip();
   const q=$('#search').value.toLowerCase(),st=$('#status').value,a=$('#auth-filter').value;
   const rows=sortedChannels(data.filter(x=>(!q||[x.name,x.target,x.remote].join(' ').toLowerCase().includes(q))&&(!st||x.status===st)&&(!a||x.auth===a)));
   pageCount=Math.max(1,Math.ceil(rows.length/pageSize));currentPage=Math.min(currentPage,pageCount);
@@ -96,6 +115,21 @@ function render(){
     let row=existing.get(channel.name);const {checkedAt,...snapshot}=channel;const signature=JSON.stringify(snapshot);
     if(!row||row.dataset.snapshot!==signature){
       const template=document.createElement('template');template.innerHTML=`<table><tbody>${rowHtml(channel)}</tbody></table>`;const replacement=template.content.querySelector('tr');replacement.dataset.snapshot=signature;
+      replacement.cells[1].querySelector('.subtext')?.remove();
+      replacement.querySelector('.actions button').classList.add('terminal-action');
+      const power=replacement.querySelector('.connect-button');
+      power.dataset.state=power.disabled?'unavailable':channel.status==='畅通'?'connected':'disconnected';
+      if(channel.operatingSystem||channel.architecture){
+        const platform=document.createElement('span');platform.className='channel-platform';
+        const description=[channel.operatingSystem,channel.architecture].filter(Boolean).join(' · ');
+        platform.dataset.system=channel.operatingSystem||'';platform.dataset.architecture=channel.architecture||'';platform.setAttribute('aria-label',description);platform.tabIndex=0;platform.setAttribute('role','img');
+        const system=(channel.operatingSystem||'').toLowerCase();
+        const icon=[['ubuntu',/ubuntu/],['debian',/debian/],['redhat',/red hat|rhel/],['fedora',/fedora/],['alpine',/alpine/],['rocky',/rocky/],['centos',/centos/],['apple',/darwin|macos|mac os/],['linux',/linux/]].find(([,pattern])=>pattern.test(system))?.[0];
+        platform.dataset.platform=icon||'generic';
+        if(icon){const mark=document.createElement('span');mark.className='platform-mark';mark.style.setProperty('--platform-icon',`url('/assets/platforms/${icon}.svg')`);mark.setAttribute('aria-hidden','true');platform.append(mark);}
+        else platform.innerHTML=`<i data-lucide="${/windows|mingw|msys/.test(system)?'panels-top-left':'monitor'}" aria-hidden="true"></i>`;
+        replacement.querySelector('.channel-name').prepend(platform);
+      }
       if(row)row.replaceWith(replacement);row=replacement;
     }
     keep.add(row);
@@ -110,7 +144,7 @@ function render(){
   lucide.createIcons();tableWrap.scrollTop=scrollTop;
 }
 function rowHtml(x){const gateway=x.source==='jumpserver'?x.serverName:x.jump||I18n.t('直连');return I18n.html(`<tr data-channel="${esc(x.name)}"><td class="check"><input type="checkbox" aria-label="${esc(x.name)}"></td><td><span class="channel-name"><span class="name" title="${esc(x.name)}">${esc(x.name)}</span><button type="button" class="copy-name" data-name="${esc(x.name)}" title="复制通道名称" aria-label="复制通道名称"><i data-lucide="copy"></i></button></span><span class="subtext">${esc(x.assetName||x.remote||I18n.t('本机通道'))}</span></td><td title="${esc(x.target)}">${esc(x.target)}</td><td title="${esc(gateway)}">${esc(gateway)}</td><td><span class="pill ${x.auth==='key'?'key':'auth'}">${x.auth==='jumpserver'?'JumpServer':x.auth==='key'?I18n.t('SSH 私钥'):I18n.t('用户名 / 密码')}</span></td><td><span class="pill ${x.status==='畅通'?'up':'down'}">${esc(I18n.t(x.status))}</span></td><td>${esc(I18n.t(x.keepalive||'-'))}</td><td>${esc(x.started||'-')}</td><td><div class="actions"><button type="button" title="打开终端" aria-label="打开终端" ${x.status!=='畅通'?'disabled':''} onclick="openTerminal('${esc(x.name)}')"><i data-lucide="terminal"></i></button><button class="connect-button ${x.status==='畅通'?'is-connected':'is-disconnected'}" ${x.status!=='畅通'&&!x.canConnect?'disabled':''} title="${esc(x.status==='畅通'?I18n.t('断开通道'):x.canConnect?I18n.t('连接通道'):x.connectDisabledReason||I18n.t('请先补全连接信息'))}" aria-label="${x.status==='畅通'?I18n.t('断开通道'):I18n.t('连接通道')}" onclick="reconnect('${esc(x.name)}')"><i data-lucide="power"></i></button><button title="编辑" aria-label="编辑" onclick="edit('${esc(x.name)}')"><i data-lucide="pencil"></i></button><button class="danger" title="删除" aria-label="删除" onclick="removeChannel('${esc(x.name)}')"><i data-lucide="trash-2"></i></button></div></td></tr>`);}
-function updateChannel(channel){const index=data.findIndex(x=>x.name===channel.name);if(index<0)data.unshift(channel);else data[index]=channel;const row=[...$('#list').children].find(row=>row.dataset.channel===channel.name);if(row)delete row.dataset.snapshot;render();}
+function updateChannel(channel){const index=data.findIndex(x=>x.name===channel.name);if(index<0)data.unshift(channel);else{const previous=data[index];data[index]={...channel,operatingSystem:channel.operatingSystem||previous.operatingSystem||'',architecture:channel.architecture||previous.architecture||''};}const row=[...$('#list').children].find(row=>row.dataset.channel===channel.name);if(row)delete row.dataset.snapshot;render();}
 function esc(s=''){return s.replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 async function load(checkStatus=false){const list=$('#list'),refresh=$('#refresh');list.innerHTML=I18n.html('<tr><td colspan="9" class="loading"><span class="spinner"></span><span>正在读取通道列表...</span></td></tr>');refresh.disabled=true;try{const r=await api(checkStatus?'/api/channels/refresh':'/api/channels',checkStatus?{method:'POST'}:{});data=r.channels;render()}catch(e){list.innerHTML=I18n.html(`<tr><td colspan="9" class="empty error-state">读取失败：${esc(e.message)} <button id="retry" class="retry">重新加载</button></td></tr>`);$('#retry').onclick=()=>load(checkStatus)}finally{refresh.disabled=false}}
 function openForm(row){editing=row?.name||null;$('#modal-title').textContent=editing?I18n.t('编辑通道'):I18n.t('新增通道');const f=$('#form');f.reset();jumpSelect.innerHTML=I18n.html('<option value="">不使用跳板（直接连接）</option>')+data.filter(x=>x.name!==editing).map(x=>`<option value="${esc(x.name)}">${esc(x.name)} · ${esc(I18n.t(x.status))}</option>`).join('');if(row?.jump&&!data.some(x=>x.name===row.jump))jumpSelect.insertAdjacentHTML('beforeend',I18n.html(`<option value="${esc(row.jump)}">${esc(row.jump)} · 不存在</option>`));jumpSelect.value=row?.jump||'';selectedIdentity=null;for(const k of ['name','identity'])f.elements[k].value=row?.[k]||'';const target=(row?.target||'').match(/^(.*):(\d+)$/);const destination=target?target[1]:row?.target||'';const separator=destination.lastIndexOf('@');f.elements.username.value=separator<0?'':destination.slice(0,separator);f.elements.host.value=separator<0?destination:destination.slice(separator+1);f.elements.port.value=target?target[2]:'22';f.elements.auth.value=row?.auth==='key'?'key':'password';f.elements.insecure.checked=Boolean(row?.insecure);f.elements.password.value='';f.elements.name.readOnly=!!editing;$('#form-error').textContent='';toggleAuth();$('#modal').showModal();jmsUI.open(row)}
