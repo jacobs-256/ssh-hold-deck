@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
     process::Stdio,
-    sync::Arc,
+    sync::{atomic::Ordering, Arc},
     time::Duration,
 };
 use tokio::{
@@ -187,6 +187,10 @@ impl App {
                     value[key] = json!(s(&c, key));
                 }
             }
+            value["started"] = json!(c["createdAt"]
+                .as_str()
+                .filter(|text| !text.is_empty())
+                .unwrap_or_else(|| s(&c, "started")));
             for key in [
                 "source",
                 "serverId",
@@ -314,13 +318,20 @@ impl App {
             .data_gate
             .try_read()
             .map_err(|_| Error::status(409, "备份正在恢复"))?;
+        let revision = self.status_revision.load(Ordering::SeqCst);
         let output = self.run_cli(&["list"]).await?;
         if !output.ok {
             return Err(Error::bad("读取通道状态失败"));
         }
         let live = parse_list(&output.stdout);
+        // A CLI list may have captured the temporary stop during an edit.
+        // Serialize commits with operation boundaries and discard stale results.
+        let operations = self.operations.lock().unwrap();
+        if self.status_revision.load(Ordering::SeqCst) != revision {
+            return Ok(());
+        }
         for (name, _) in self.store.configs()? {
-            if self.operations.lock().unwrap().contains(&name) {
+            if operations.contains(&name) {
                 continue;
             }
             let mut snapshot = live
@@ -529,7 +540,15 @@ impl App {
         if body.get("source").is_some() && body["source"] != "manual" {
             return Err(Error::bad("连接来源无效"));
         }
-        let c = json!({"source":"manual","target":body["target"],"port":body["port"].as_u64().unwrap_or(22),"auth":body["auth"].as_str().unwrap_or("password"),"identity":body.get("identity").unwrap_or(&old["identity"]),"password":if s(body,"password").is_empty(){s(old,"password")}else{s(body,"password")},"jump":s(body,"jump"),"insecure":body["insecure"]==true});
+        let port = match body.get("port") {
+            None => 22,
+            Some(value) => value
+                .as_u64()
+                .or_else(|| value.as_str().and_then(|text| text.parse::<u64>().ok()))
+                .filter(|port| (1..=65535).contains(port))
+                .ok_or_else(|| Error::bad("请先编辑并填写有效端口"))?,
+        };
+        let c = json!({"source":"manual","target":body["target"],"port":port,"auth":body["auth"].as_str().unwrap_or("password"),"identity":body.get("identity").unwrap_or(&old["identity"]),"password":if s(body,"password").is_empty(){s(old,"password")}else{s(body,"password")},"jump":s(body,"jump"),"insecure":body["insecure"]==true});
         let available = availability(&c);
         if available["canConnect"] != true {
             return Err(Error::bad(s(&available, "connectDisabledReason")));
@@ -562,7 +581,11 @@ struct Operation<'a> {
 }
 impl Drop for Operation<'_> {
     fn drop(&mut self) {
-        self.app.operations.lock().unwrap().remove(&self.name);
+        {
+            let mut operations = self.app.operations.lock().unwrap();
+            operations.remove(&self.name);
+            self.app.status_revision.fetch_add(1, Ordering::SeqCst);
+        }
         self.app.publish();
     }
 }
@@ -611,6 +634,7 @@ pub async fn api(
         if !operations.insert(name.clone()) {
             return Err(Error::status(409, "该通道正在连接或更新，请稍后重试"));
         }
+        app.status_revision.fetch_add(1, Ordering::SeqCst);
     }
     let _guard = Operation {
         app,

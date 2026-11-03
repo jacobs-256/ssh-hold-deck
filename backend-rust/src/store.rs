@@ -32,11 +32,17 @@ impl Store {
         private_mode(&file, 0o600)?;
         db.busy_timeout(std::time::Duration::from_secs(5))?;
         db.execute_batch("CREATE TABLE IF NOT EXISTS channels(name TEXT PRIMARY KEY,config TEXT NOT NULL);CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);CREATE TABLE IF NOT EXISTS channel_status(name TEXT PRIMARY KEY,snapshot TEXT NOT NULL);CREATE TABLE IF NOT EXISTS web_sessions(token_hash TEXT PRIMARY KEY,expires INTEGER NOT NULL);")?;
-        Ok(Self {
+        let store = Self {
             db: Mutex::new(db),
             directory,
             key: crypto::vault_key(),
-        })
+        };
+        for (name, config) in store.configs()? {
+            if config["createdAt"].as_str().unwrap_or("").is_empty() {
+                store.save(&name, &config)?;
+            }
+        }
+        Ok(store)
     }
     pub fn setting(&self, key: &str) -> Result<Option<String>> {
         Ok(self
@@ -87,7 +93,27 @@ impl Store {
         raw.map(|r| self.unseal(&r)).transpose()
     }
     pub fn save(&self, name: &str, value: &Value) -> Result<()> {
-        let raw = self.seal(value)?;
+        let previous = self.config(name)?.unwrap_or(json!({}));
+        let snapshot = self.status(name)?;
+        let mut value = value.clone();
+        let created = [
+            &previous["createdAt"],
+            &value["createdAt"],
+            &previous["started"],
+            &value["started"],
+            &snapshot["started"],
+        ]
+        .into_iter()
+        .find_map(|value| value.as_str().filter(|text| !text.is_empty()));
+        value["createdAt"] = match created {
+            Some(created) => json!(created),
+            None => json!(self.db.lock().unwrap().query_row(
+                "SELECT strftime('%Y-%m-%d %H:%M:%S','now','localtime')",
+                [],
+                |row| row.get::<_, String>(0)
+            )?),
+        };
+        let raw = self.seal(&value)?;
         self.db.lock().unwrap().execute(
             "INSERT OR REPLACE INTO channels(name,config) VALUES(?,?)",
             [name, &raw],

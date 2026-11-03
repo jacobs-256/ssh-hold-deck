@@ -17,6 +17,12 @@ service user's PATH. No Node executable is needed on the service machine.
 
 ## Migration and rollback
 
+Channel opening time represents creation time and remains fixed across edits and
+reconnections. Existing records without `createdAt` are backfilled from saved
+opening time or the last status snapshot, falling back to migration time if neither
+exists. An original creation time already overwritten by older versions cannot
+be recovered accurately from the current database.
+
 1. Export an encrypted portable backup from the old UI and retain the old binary.
 2. Stop the old service and copy its entire web data directory, including uploaded
    keys and SQLite sidecars. Keep the original snapshot untouched.
