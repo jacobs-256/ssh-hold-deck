@@ -1,35 +1,35 @@
 # Project Structure
 
-```text
-.
-├── src/                    # Node.js application source
-│   ├── server.js           # Entry point, HTTP routes, SQLite and channel operations
-│   ├── auth.js             # Web login and sessions
-│   ├── connection-config.js# Connection readiness validation
-│   ├── jump.js             # Reuse existing channels as jump hosts
-│   ├── jumpserver.js       # JumpServer API client
-│   └── terminal-server.js  # WebSocket authorization and PTY lifecycle
-├── public/                 # Browser HTML, JavaScript and CSS
-├── tests/
-│   ├── unit/               # Isolated module and translation tests
-│   └── integration/        # HTTP, SQLite and terminal integration checks
-├── scripts/                # Installation and maintenance scripts
-├── docs/                   # Architecture and release documentation
-├── data/                   # Local runtime data; ignored by Git
-├── package.json            # Dependencies and standard npm commands
-├── package-lock.json       # Reproducible dependency resolution
-├── README.md               # Default English documentation
-└── README.zh-CN.md          # Chinese translation
-```
+The backend is Rust. Browser JavaScript and npm build/test tooling remain; no
+Node executable or Node modules are loaded by the running application.
 
-## Commands
+| Path | Responsibility |
+| --- | --- |
+| `backend-rust/src/lib.rs` | Axum HTTP routes, sessions, origins, SSE, listener lifecycle |
+| `backend-rust/src/store.rs` | Bundled SQLite, encrypted configuration, session persistence |
+| `backend-rust/src/crypto.rs` | Node-compatible AES-GCM and scrypt formats |
+| `backend-rust/src/channels.rs` | CLI operations, jump routing, platform probes |
+| `backend-rust/src/jumpserver.rs` | HTTPS, HMAC signing, permissions and temporary tokens |
+| `backend-rust/src/terminal.rs` | PTY, WebSocket grants and shell cleanup |
+| `backend-rust/src/backup.rs` | Encrypted portable backup and transactional restore |
+| `backend-rust/src/host_keys.rs` | Fingerprint confirmation and known_hosts backup |
+| `backend-rust/src/system.rs` | CLI installation, service settings and agent skills |
+| `public/` | Browser interface and static assets |
+| `src-tauri/` | Desktop lifecycle, windows, tray and updater |
+| `tests/rust/` | HTTP/SQLite/PTY integration tests against the Rust executable |
+| `tests/compat/` | Previous algorithms used only as compatibility test oracles |
 
-- `npm ci`: install locked dependencies and prepare the PTY helper.
-- `npm start`: run `src/server.js` from the project root.
-- `npm test`: run unit tests, integration tests, and SQLite verification.
+Run `npm ci` and `npm run web:prepare` to prepare browser vendor bundles. Run
+`npm start` to compile and start Rust, or launch the release executable directly.
+`npm test` runs Rust unit tests, browser tests, compatibility tests and Rust HTTP
+integration tests. Node is used only by the development harness.
 
-The server resolves static assets, node_modules, and the default data directory relative to the project root, independently of the source directory. Moving code into src does not relocate existing data or change the default URL.
+Lists read persisted snapshots without waiting for SSH. Background probes push
+updates through SSE. SSH masters remain owned by the external ssh-hold CLI;
+closing a terminal ends only its PTY shell. Password changes and restored backups
+revoke sessions. Backups cannot replace configuration during channel operations.
 
-The backend delegates SSH lifecycle operations to the external ssh-hold CLI. SQLite stores configuration and status snapshots; background probes update status without delaying list reads. Browser terminals communicate through authenticated WebSockets with PTY processes. Frontend assets are served locally without a build step.
-
-Keep runtime data and private keys out of source control. See SECURITY.md and PUBLISHING.md for release boundaries. The source layout is intentionally flat inside src until module size and ownership justify further subdivision.
+macOS uses the desktop executable itself in `--backend` mode as a supervised
+child. Windows starts a compiled Linux Rust backend in WSL2. Desktop resources
+contain static browser bundles, their licenses and a manifest; Windows also
+carries the Linux executable. Data and keys live outside the application bundle.

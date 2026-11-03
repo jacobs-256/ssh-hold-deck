@@ -11,7 +11,7 @@ mkdir -p "$backend_root"
 staging=$(mktemp -d "$backend_root/.prepare-XXXXXXXX")
 trap 'rm -rf "$staging"' EXIT
 cp -R "$source_dir/." "$staging/"
-chmod +x "$staging/runtime/node"
+chmod +x "$staging/ssh-hold-backend"
 mv "$staging" "$backend.new"
 old="$backend_root/.previous-$$"
 if [ -d "$backend" ]; then mv "$backend" "$old"; fi
@@ -23,4 +23,6 @@ export SSH_HOLD_WEB_DATA_DIR="$HOME/.local/share/ssh-hold-deck/data"
 export SSH_HOLD_WINDOWS_HOME="$windows_home"
 export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 cd "$backend"
-exec "$backend/runtime/node" "$backend/backend-entry.mjs"
+export SSH_HOLD_DESKTOP=1
+export SSH_HOLD_PUBLIC_DIR="$backend/public"
+exec "$backend/ssh-hold-backend"

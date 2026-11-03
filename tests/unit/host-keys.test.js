@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { createHostKeyManager } from '../../src/host-keys.js';
+import { createHostKeyManager } from '../compat/host-keys.js';
 
 const exec = promisify(execFile);
 test('host key replacement requires a matching observed fingerprint, session and unchanged file; backs up and preserves other hosts', async () => {

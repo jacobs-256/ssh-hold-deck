@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { createAuth } from '../../src/auth.js';
+import { createAuth } from '../compat/auth.js';
 
 function fixture() {
   const db = new DatabaseSync(':memory:'); db.exec('CREATE TABLE settings (key TEXT PRIMARY KEY,value TEXT NOT NULL)');

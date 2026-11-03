@@ -4,7 +4,7 @@ Thank you for considering a contribution. The repository license must be selecte
 
 ## Development
 
-Use Node.js 22.13.0 or later and install dependencies with `npm ci`. A compatible `ssh-hold` CLI is required to run the application; it is not bundled. See [README.md](README.md) for prerequisites and configuration.
+Use Rust stable and Node.js 24 for development. Install browser/test dependencies with `npm ci` and prepare static resources with `npm run web:prepare`. Node is not a runtime dependency. A compatible `ssh-hold` CLI is required to run the application; it is not bundled. See [README.md](README.md) for prerequisites and configuration.
 
 Keep changes focused. Preserve same-origin checks, session authorization, argument-array subprocess execution, and credential redaction. Never include real SSH passwords, private keys, JumpServer secrets, SQLite databases, or production host information in patches, logs, tests, or screenshots.
 
@@ -18,6 +18,6 @@ For UI changes, verify desktop and narrow layouts, loading/error states, and bot
 
 ## Bug Reports and Pull Requests
 
-Include the Node.js version, OS, reproduction steps, expected behavior, actual behavior, and sanitized diagnostics. For terminal issues, distinguish opening a shell from connecting the underlying channel.
+Include the application/Rust version, OS, reproduction steps, expected behavior, actual behavior, and sanitized diagnostics. For terminal issues, distinguish opening a shell from connecting the underlying channel.
 
 Pull requests should explain the problem, the behavior after the change, and verification performed. Discuss significant dependencies or architectural changes before implementing them. Follow [SECURITY.md](SECURITY.md) for vulnerabilities rather than posting sensitive details in public issues.

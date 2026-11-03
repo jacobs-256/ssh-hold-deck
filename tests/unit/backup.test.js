@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { encodeBackup, decodeBackup, validateBackup } from '../../src/backup.js';
+import { encodeBackup, decodeBackup, validateBackup } from '../compat/backup.js';
 
 const payload = () => ({ version: 1, channels: [{ name: 'production', config: { target: 'root@example.com', port: 22, auth: 'password', password: 'ssh-secret' } }],
   settings: [{ key: 'login_password', value: JSON.stringify({ salt: 'a'.repeat(64), hash: 'b'.repeat(128) }) }], preferences: { 'ssh-hold-language': 'en' }, desktop: { closeBehavior: 'tray', trayEnabled: true } });

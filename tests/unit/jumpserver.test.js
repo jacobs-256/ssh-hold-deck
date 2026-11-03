@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { JumpServerClient, normalizeServer, publicServer, signatureHeaders } from '../../src/jumpserver.js';
-import { connectionAvailability } from '../../src/connection-config.js';
+import { JumpServerClient, normalizeServer, publicServer, signatureHeaders } from '../compat/jumpserver.js';
+import { connectionAvailability } from '../compat/connection-config.js';
 
 const assetId = '11111111-1111-4111-8111-111111111111';
 const account = '22222222-2222-4222-8222-222222222222';

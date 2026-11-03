@@ -19,10 +19,9 @@ jobs:
           node-version: '24.22.0'
           cache: npm
       - run: npm ci
+      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
       - run: npm test
       - run: npm run desktop:prepare
       - run: npm run desktop:verify
-      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
-        if: runner.os == 'macOS'
       - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
         if: runner.os == 'macOS'

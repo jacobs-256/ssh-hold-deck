@@ -83,6 +83,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: node scripts/check-release-version.mjs
+      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
       - run: npm ci
       - run: npm test
 
@@ -98,6 +99,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
       - run: npm ci
       - run: npm run desktop:prepare
       - run: npm run desktop:verify
@@ -208,100 +210,6 @@ jobs:
       - name: Verify native macOS backend
         if: runner.os == 'macOS'
         run: npm run desktop:verify
-      - name: Sign embedded macOS native binaries
-        if: runner.os == 'macOS' && inputs.apple_signing == true
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          node --input-type=module <<'NODE'
-          import { mkdtempSync, writeFileSync, readFileSync, rmSync, readdirSync, openSync, readSync, closeSync } from 'node:fs';
-          import { tmpdir } from 'node:os';
-          import { join, resolve, relative } from 'node:path';
-          import { spawnSync } from 'node:child_process';
-          import { randomUUID, createHash } from 'node:crypto';
-          const root = resolve('desktop/backend');
-          // Inspect file headers rather than extensions: spawn-helper has no extension.
-          const magic = new Set(['feedface', 'cefaedfe', 'feedfacf', 'cffaedfe', 'cafebabe', 'bebafeca', 'cafebabf', 'bfbafeca']);
-          function binaries(directory) {
-            const found = [];
-            for (const entry of readdirSync(directory, { withFileTypes: true })) {
-              const file = join(directory, entry.name);
-              if (entry.isDirectory()) found.push(...binaries(file));
-              else if (entry.isFile()) {
-                const descriptor = openSync(file, 'r');
-                const header = Buffer.alloc(4);
-                try { if (readSync(descriptor, header, 0, 4, 0) === 4 && magic.has(header.toString('hex'))) found.push(file); }
-                finally { closeSync(descriptor); }
-              }
-            }
-            return found;
-          }
-          const files = binaries(root);
-          for (const required of ['runtime/node', 'pty.node', 'spawn-helper']) {
-            if (!files.some(file => file.endsWith('/' + required))) throw Error(`Missing native binary: ${required}`);
-          }
-          const directory = mkdtempSync(join(tmpdir(), 'deck-native-signing-'));
-          const keychain = join(directory, 'signing.keychain-db');
-          const certificate = join(directory, 'certificate.p12');
-          const password = randomUUID();
-          function security(args) {
-            const result = spawnSync('/usr/bin/security', args, { encoding: 'utf8' });
-            if (result.status !== 0) throw Error(`Native-signing security ${args[0]} failed; tool output withheld.`);
-            return result;
-          }
-          let originalKeychains;
-          try {
-            const listed = security(['list-keychains', '-d', 'user']).stdout;
-            originalKeychains = [...listed.matchAll(/"([^"]+)"/g)].map(match => match[1]);
-            if (!originalKeychains.length) throw Error('Cannot resolve the original user keychain search list.');
-            writeFileSync(certificate, Buffer.from(process.env.APPLE_CERTIFICATE.replace(/\s/g, ''), 'base64'), { mode: 0o600 });
-            security(['create-keychain', '-p', password, keychain]);
-            security(['set-keychain-settings', '-lut', '21600', keychain]);
-            security(['unlock-keychain', '-p', password, keychain]);
-            security(['import', certificate, '-k', keychain, '-f', 'pkcs12', '-P', process.env.APPLE_CERTIFICATE_PASSWORD || '', '-T', '/usr/bin/codesign']);
-            security(['list-keychains', '-d', 'user', '-s', keychain, ...originalKeychains]);
-            security(['set-key-partition-list', '-S', 'apple-tool:,apple:', '-s', '-k', password, keychain]);
-            const available = security(['find-identity', '-v', '-p', 'codesigning', keychain]).stdout;
-            const identities = [...available.matchAll(/\b([0-9A-F]{40}) "([^"]+)"/gi)];
-            const matching = identities.filter(([, hash, name]) =>
-              name.startsWith('Developer ID Application:') &&
-              name.endsWith(`(${process.env.APPLE_TEAM_ID})`) &&
-              (name === process.env.APPLE_SIGNING_IDENTITY || hash.toUpperCase() === process.env.APPLE_SIGNING_IDENTITY.toUpperCase()));
-            if (matching.length !== 1) throw Error('Cannot resolve one valid Developer ID signing identity and private key for the configured name/team in the imported keychain.');
-            const fingerprint = matching[0][1];
-            for (const file of files) {
-              console.log(`Signing native resource: ${relative(root, file)}`);
-              const signed = spawnSync('/usr/bin/codesign', ['--force', '--sign', fingerprint,
-                '--keychain', keychain, '--timestamp', '--options', 'runtime',
-                '--entitlements', resolve('src-tauri/Entitlements.plist'), file], { stdio: 'inherit' });
-              if (signed.status !== 0) throw Error(`Native signing failed: ${relative(root, file)}`);
-              const verified = spawnSync('/usr/bin/codesign', ['--verify', '--strict', file], { stdio: 'inherit' });
-              const details = spawnSync('/usr/bin/codesign', ['-dv', '--verbose=4', file], { encoding: 'utf8' });
-              if (verified.status !== 0 || details.status !== 0 ||
-                  !details.stderr.includes('Authority=Developer ID Application:') ||
-                  !/^Timestamp=/m.test(details.stderr) || !details.stderr.includes('(runtime)') ||
-                  !details.stderr.includes(`TeamIdentifier=${process.env.APPLE_TEAM_ID}\n`)) {
-                throw Error(`Native signature requires Developer ID, matching team, secure timestamp and hardened runtime: ${relative(root, file)}`);
-              }
-            }
-            const manifestPath = join(root, 'desktop-manifest.json');
-            const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-            manifest.runtimeSha256 = createHash('sha256').update(readFileSync(join(root, 'runtime/node'))).digest('hex');
-            writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-            console.log(`Verified ${files.length} embedded native signatures before app signing and notarization.`);
-          } finally {
-            if (originalKeychains?.length) {
-              const restored = spawnSync('/usr/bin/security', ['list-keychains', '-d', 'user', '-s', ...originalKeychains], { stdio: 'ignore' });
-              if (restored.status !== 0) console.error('::warning::Could not restore the original keychain search list.');
-            }
-            spawnSync('/usr/bin/security', ['delete-keychain', keychain], { stdio: 'ignore' });
-            rmSync(directory, { recursive: true, force: true });
-          }
-          NODE
-          npm run desktop:verify
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         if: runner.os == 'Windows'
         with:

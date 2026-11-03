@@ -6,13 +6,14 @@ import { access, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
+import { binary } from './helpers.js';
 
 test('agent skill routes require authentication, same-origin mutations and explicit uninstall confirmation', { timeout: 15000 }, async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'deck-agent-api-'));
   await mkdir(path.join(home, '.claude'));
   const socket = net.createServer().listen(0, '127.0.0.1'); await once(socket, 'listening');
   const port = socket.address().port; await new Promise(resolve => socket.close(resolve));
-  const child = spawn(process.execPath, ['src/server.js'], {
+  const child = spawn(binary, [], {
     cwd: path.resolve(import.meta.dirname, '../..'),
     env: { ...process.env, HOME: home, USERPROFILE: home, CODEX_HOME: path.join(home, '.codex'),
       CLAUDE_CONFIG_DIR: path.join(home, '.claude'), DSH_HOME: path.join(home, '.dsh'),

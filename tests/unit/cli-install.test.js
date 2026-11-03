@@ -11,7 +11,7 @@ test('CLI detection, failed download, concurrent installation and PATH work with
   try {
     const source = `
       import assert from 'node:assert/strict';
-      import {cliStatus,installCli} from ${JSON.stringify(new URL('../../src/cli-install.js',import.meta.url).href)};
+      import {cliStatus,installCli} from ${JSON.stringify(new URL('../compat/cli-install.js',import.meta.url).href)};
       process.env.PATH=process.env.HOME+'/.local/bin';
       assert.equal((await cliStatus()).installed,false);
       globalThis.fetch=async()=>new Response('error',{status:503});

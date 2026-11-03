@@ -6,7 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import {once} from 'node:events';
-import {bindService,checkPort,validPort} from '../../src/service-port.js';
+import {bindService,checkPort,validPort} from '../compat/service-port.js';
+import { binary } from './helpers.js';
 
 test('port validation and bind fallback handle occupied ports',async()=>{
   assert.equal(validPort(1023),false);assert.equal(validPort(65536),false);assert.equal(validPort(8787),true);
@@ -24,7 +25,7 @@ test('authenticated port changes restart HTTP service, retain sessions and persi
   async function start(port) {
     const env={...process.env,HOST:'127.0.0.1',SSH_HOLD_WEB_DATA_DIR:temporary,SSH_HOLD_DIR:path.join(temporary,'hold')};
     delete env.PORT;if(port!==undefined)env.PORT=String(port);
-    child=spawn(process.execPath,['src/server.js'],{cwd:path.resolve(import.meta.dirname,'../..'),env,stdio:['ignore','pipe','pipe']});
+    child=spawn(binary,[],{cwd:path.resolve(import.meta.dirname,'../..'),env,stdio:['ignore','pipe','pipe']});
     return new Promise((resolve,reject)=>{let output='';const timer=setTimeout(()=>reject(Error('Server start timed out: '+output)),15000);child.stdout.on('data',chunk=>{output+=chunk;const match=output.match(/http:\/\/127\.0\.0\.1:(\d+)/);if(match){clearTimeout(timer);resolve(Number(match[1]));}});child.once('exit',code=>{clearTimeout(timer);reject(Error('Server exited '+code));});});
   }
   async function stop(){if(child&&child.exitCode===null){child.kill();await once(child,'exit');}}

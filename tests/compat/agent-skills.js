@@ -13,7 +13,7 @@ async function exists(file, mode = constants.F_OK) {
 
 export function createAgentSkills({ home = os.homedir(), env = process.env, platform = process.platform,
   applications = platform === 'darwin' ? ['/Applications', path.join(home, 'Applications')] : [],
-  source = new URL('../public/assets/ssh-hold-skill.md', import.meta.url) } = {}) {
+  source = new URL('../../public/assets/ssh-hold-skill.md', import.meta.url) } = {}) {
   const config = env.XDG_CONFIG_HOME || path.join(home, '.config');
   const catalog = [
     { id: 'codex', name: 'Codex', commands: ['codex'], apps: ['Codex.app', 'ChatGPT.app'],

@@ -2,7 +2,7 @@
 
 [English](README.md) | **简体中文**
 
-本项目基于开源工具 [ssh-hold](https://github.com/CherryLover/ssh-hold)，在其 SSH 通道管理能力之上增加 Node.js Web 管理界面、SQLite 配置存储、多标签终端和 JumpServer 集成。SSH 通道的创建、复用和生命周期管理仍由 ssh-hold 负责。
+本项目基于开源工具 [ssh-hold](https://github.com/CherryLover/ssh-hold)，使用 Rust 提供 HTTP API、SQLite 配置存储、登录认证、JumpServer 集成及 PTY/WebSocket 多标签终端。SSH 通道的创建、复用和生命周期管理仍由 ssh-hold 负责，程序运行不再依赖 Node.js。
 
 ## 功能
 
@@ -22,10 +22,10 @@ macOS 桌面应用、Windows/WSL2 安装包及 GitHub Release 自动打包见
 [桌面构建与发布说明](docs/DESKTOP.md)。Windows 使用已初始化的 WSL2 发行版运行
 SSH 后端，不依赖原生 Windows 执行 ssh-hold。
 
-- Node.js **22.13.0 或更高版本**，包含内置 `node:sqlite`。
-- npm、OpenSSH 客户端，以及 PATH 中可执行的 `ssh-hold`。
+- 编译需要 Rust stable 和原生编译工具，SQLite 随程序编译。
+- Node.js 24 和 npm 仅用于准备前端静态资源及开发测试。
+- OpenSSH 客户端，以及 PATH 中可执行的 `ssh-hold`。
 - 当前开发环境为 macOS；Linux 尚未完整验证，原生 Windows 不在当前支持范围。
-- `node-pty` 在没有可用预编译文件时需要原生编译工具；macOS 可安装 Xcode Command Line Tools。
 
 **安装或运行本项目前，请先安装 [ssh-hold](https://github.com/CherryLover/ssh-hold)。** 本仓库不包含该 CLI，请参照 [ssh-hold 上游 README 与安装说明](https://github.com/CherryLover/ssh-hold#readme) 完成安装，并准备其认证助手和其他依赖。确认在启动 Web 服务的同一环境中可以执行 `ssh-hold list`。
 
@@ -38,11 +38,12 @@ SSH 后端，不依赖原生 Windows 执行 ssh-hold。
 在克隆后的项目目录执行：
 
 ```sh
-node --version
+cargo --version
 ssh -V
 command -v ssh-hold
 ssh-hold list
 npm ci
+npm run web:prepare
 npm start
 ```
 
@@ -83,6 +84,7 @@ npm start
 | `HOST` | `0.0.0.0` | 监听地址，设为 `127.0.0.1` 时仅允许本机访问 |
 | `SSH_HOLD_DIR` | `~/.ssh/hold` | CLI 元数据和套接字目录 |
 | `SSH_HOLD_WEB_DATA_DIR` | 项目下的 `data/` | SQLite 和上传私钥的存储目录 |
+| `SSH_HOLD_PUBLIC_DIR` | `desktop/backend/public`，不存在时使用 `public` | 已准备的浏览器静态资源 |
 
 ```sh
 PORT=8888 SSH_HOLD_WEB_DATA_DIR="$HOME/.local/share/ssh-hold-deck" npm start
@@ -107,17 +109,17 @@ npm ci
 npm test
 ```
 
-测试使用模拟依赖和临时目录，不要求真实 JumpServer 凭据。终端测试需要可运行的 `node-pty`。
+测试启动 Rust 后端，使用模拟 SSH 命令和临时目录，不要求真实 JumpServer 凭据；兼容性测试核对旧版 JavaScript 的凭据及备份格式。
 
-主要模块：`src/server.js`（HTTP、SQLite、通道操作）、`src/auth.js`（登录）、`src/jump.js`（跳板）、`src/jumpserver.js`（堡垒机 API）、`src/terminal-server.js`（PTY/WebSocket）及 `public/`（前端）。
+主要模块位于 `backend-rust/src/`：`lib.rs`（HTTP 和登录）、`store.rs`（SQLite）、`channels.rs`（通道）、`jumpserver.rs`（堡垒机 API）、`terminal.rs`（PTY/WebSocket）；`public/` 为前端。编译和资源准备完成后，可直接运行 `./backend-rust/target/release/ssh-hold-backend`，无需 Node 或 npm。部署到其他目录时，通过 `SSH_HOLD_PUBLIC_DIR` 指向准备好的 `desktop/backend/public`。同一用户、同一主机下可直接沿用原 SQLite 数据、密码哈希及加密凭据。
 
 ## 故障排查
 
 | 问题 | 检查方式 |
 | --- | --- |
 | 找不到 ssh-hold | 确认启动服务的 PATH 包含 CLI，终端执行 `ssh-hold list` |
-| node:sqlite 不可用 | 升级至 Node.js 22.13.0 或更高版本 |
-| PTY 启动失败 | 重新执行 `npm ci` 和 `node scripts/setup-pty.js`；必要时安装原生编译工具 |
+| 浏览器资源缺失 | 执行 `npm run web:prepare`，或通过 `SSH_HOLD_PUBLIC_DIR` 指定已准备的资源目录 |
+| PTY 启动失败 | 检查 ssh-hold 可执行权限，以及系统是否允许分配 PTY |
 | 连接按钮禁用 | 编辑并补全用户名、主机及密码或私钥路径 |
 | 跳板不可用 | 先连接跳板；必要时 Reload 导入其记录 |
 | 终端被拒绝 | 使用本机地址或服务器局域网 IP 访问并重新登录，确认通道畅通 |

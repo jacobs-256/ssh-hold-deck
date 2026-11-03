@@ -4,7 +4,7 @@ import { access, chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFil
 import os from 'node:os';
 import path from 'node:path';
 import { parse } from 'yaml';
-import { createAgentSkills } from '../../src/agent-skills.js';
+import { createAgentSkills } from '../compat/agent-skills.js';
 
 async function fixture(t, options = {}) {
   const home = await mkdtemp(path.join(os.tmpdir(), 'deck-agent-skills-'));

@@ -7,11 +7,12 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { decodeBackup } from '../../src/backup.js';
+import { decodeBackup } from '../compat/backup.js';
+import { binary } from './helpers.js';
 
 test('backup APIs require authentication and confirmation; restore credentials, keys and settings atomically', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'deck-backup-'));
-  const child = spawn(process.execPath, ['src/server.js'], { cwd: path.resolve(import.meta.dirname, '../..'),
+  const child = spawn(binary, [], { cwd: path.resolve(import.meta.dirname, '../..'),
     env: { ...process.env, HOST: '127.0.0.1', PORT: '0', SSH_HOLD_WEB_DATA_DIR: directory, SSH_HOLD_DIR: path.join(directory, 'hold') }, stdio: ['ignore', 'pipe', 'pipe'] });
   let db;
   try {

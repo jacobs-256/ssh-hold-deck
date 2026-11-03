@@ -1,6 +1,6 @@
 # Desktop Builds
 
-SSH Hold Deck uses Tauri 2 with a bundled Node.js 24 runtime. End users do not
+SSH Hold Deck uses Tauri 2 and a Rust backend. End users do not
 need Node, npm, Rust or a compiler. The SSH CLI remains a separate dependency;
 the existing dashboard can install ssh-hold into the backend user's directory.
 An OpenSSH client is required; password authentication also requires sshpass.
@@ -19,17 +19,24 @@ npm run desktop:build -- --bundles app,dmg -- --locked
 Outputs are under `src-tauri/target/release/bundle/`. `npm run desktop:dev`
 prepares the backend and starts the development application.
 
-Runtime, production dependencies and static assets are prepared in the ignored
-`desktop/backend/` directory. Preparation runs on the target OS and architecture;
-do not copy macOS native dependencies to Windows/Linux or across architectures.
-The preparation script copies the current Node executable, so use the documented
-Node version for reproducible local builds. CI pins that version explicitly.
+Static assets, browser vendor bundles, licenses and the resource manifest are
+prepared in the ignored `desktop/backend/` directory. macOS runs the same desktop
+executable in `--backend` child mode; no separate backend binary is bundled.
+For Windows, prepare on Linux and include the Linux Rust executable for WSL2.
+No Node runtime, node_modules or node-pty binaries are included. Node is used
+only for build tooling and development tests. Run `npm run desktop:verify`
+after preparation to check authentication, SQLite, resources and shutdown.
 
-Desktop preparation prunes dependencies after installation: only the current
-platform's PTY binaries and the browser bundles served by the backend are kept.
-Unused module formats, source maps, tests and PTY build sources are excluded;
-package licenses are retained. Run `npm run desktop:verify` after preparation
-to verify SQLite, PTY execution and every browser vendor resource before bundling.
+## macOS Background Service
+
+For a macOS LaunchAgent, deploy the release executable, prepared public resources
+and writable data outside protected development folders such as Documents.
+Use absolute `SSH_HOLD_PUBLIC_DIR` and `SSH_HOLD_WEB_DATA_DIR` paths and a working
+directory under the user's application data directory. Preserve a SQLite backup
+before relocating data, and update uploaded private-key paths when relocating
+the keys directory. The development checkout can link its ignored `data` path
+to the deployed data directory. Rebuilds must also update the deployed executable
+and public resources before restarting the LaunchAgent.
 
 ## Windows / WSL2
 
@@ -155,18 +162,10 @@ also use this test mode. To create a Developer ID build, manually run the workfl
 from `main` and enable **apple_signing**. Empty Apple variables are removed before
 invoking Tauri because an empty `APPLE_CERTIFICATE` can still trigger import.
 Provide the complete credential set; signing/notarization errors fail the build.
-For Developer ID builds, the workflow signs every embedded Mach-O binary before
-Tauri bundles and notarizes the app, including Node and all node-pty `.node`
-modules and extensionless `spawn-helper` binaries across bundled architectures.
-Each signature requires the configured team, a secure timestamp and hardened
-runtime. Node receives the project's runtime entitlements. The signing step
-adds its temporary keychain to the user search list and resolves
-the imported Developer ID identity to its certificate fingerprint. It restores
-the original search list and deletes the temporary keychain on completion or failure.
-The runtime manifest
-hash is refreshed after signing, then SQLite, PTY and service smoke checks run
-again. Signing only the outer application does not cover these resource binaries
-and causes Apple notarization to reject the archive.
+For Developer ID builds, Tauri signs and notarizes the Rust application.
+The backend is part of that executable; browser resources contain no native
+Node modules or runtime binaries requiring a separate signing pass. JIT and
+unsigned executable memory entitlements are no longer required.
 `APPLE_CERTIFICATE` must contain the Base64-encoded contents of a `.p12` exported
 from Keychain Access with its matching private key. A `.cer` download, file path,
 certificate name or PEM text is not the required value. On your Mac, copy the
@@ -249,8 +248,8 @@ link and allow retrying. Database and key files stay in the separate data folder
 
 ## Verification Status
 
-The local Apple Silicon build verifies the bundled runtime hash, SQLite, PTY,
-HTTP resources and clean shutdown when the desktop owner closes stdin. The Node
-test suite and Rust compile checks also run locally. macOS Intel and Windows
+The local Apple Silicon checks verify SQLite, Rust PTY/WebSocket behavior,
+HTTP resources and clean shutdown when the desktop owner closes stdin. Rust
+unit tests and the development HTTP test suite also run locally. macOS Intel and Windows
 installer generation are configured for GitHub runners and need their first CI
 run; no workflow has been pushed or Release published automatically.

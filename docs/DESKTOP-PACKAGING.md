@@ -1,5 +1,9 @@
 # 桌面端打包与 GitHub Release 方案
 
+> 历史设计文档：下文记录最初的 Node 打包方案。当前已改用 Rust 后端，
+> 实际构建与目录结构请参阅 [Desktop Builds](DESKTOP.md) 和
+> [Architecture](ARCHITECTURE.md)。
+
 ## 推荐结论
 
 采用 **Tauri 2 桌面壳 + 独立 Node.js 后端 + 随包分发的 Node runtime**。

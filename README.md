@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-A Node.js web management layer built on top of the open-source [ssh-hold](https://github.com/CherryLover/ssh-hold) tool. SSH Hold Deck adds a browser-based console, SQLite configuration storage, multi-tab web terminals, and JumpServer integration while delegating SSH channel creation and lifecycle management to ssh-hold.
+A Rust web management service built on top of the open-source [ssh-hold](https://github.com/CherryLover/ssh-hold) tool. SSH Hold Deck adds a browser-based console, SQLite configuration storage, multi-tab web terminals, and JumpServer integration while delegating SSH channel creation and lifecycle management to ssh-hold. The application runs without Node.js.
 
 ## Features
 
@@ -23,10 +23,10 @@ For the macOS desktop application and Windows/WSL2 installer build, see
 build workflow. Native Windows SSH execution is not used; the Windows backend
 runs inside an initialized WSL2 distribution.
 
-- Node.js **22.13.0 or later**, including built-in `node:sqlite`.
-- npm, an OpenSSH client, and an executable `ssh-hold` on PATH.
+- Rust stable and native build tools to compile the backend; SQLite is bundled.
+- Node.js 24 and npm for preparing browser assets and running development tests only.
+- An OpenSSH client and an executable `ssh-hold` on PATH.
 - Development currently targets macOS. Linux has not been fully verified; native Windows is outside the current support scope.
-- Native build tools may be needed if `node-pty` cannot use a prebuilt binary. On macOS, install Xcode Command Line Tools when necessary.
 
 **Install [ssh-hold](https://github.com/CherryLover/ssh-hold) before installing or running this project.** The CLI is an external dependency and is not bundled here. Follow the [upstream README and installation instructions](https://github.com/CherryLover/ssh-hold#readme), including its authentication helpers and other prerequisites. Confirm that `ssh-hold list` works in the same environment used to start this web service.
 
@@ -37,11 +37,12 @@ Use a compatible version supporting `list`, `status <name>`, `start`, `stop <nam
 From the cloned project directory:
 
 ```sh
-node --version
+cargo --version
 ssh -V
 command -v ssh-hold
 ssh-hold list
 npm ci
+npm run web:prepare
 npm start
 ```
 
@@ -82,6 +83,7 @@ Choose a JumpServer asset when creating a channel, search authorized assets, and
 | `HOST` | `0.0.0.0` | Listen address; use `127.0.0.1` for local-only access |
 | `SSH_HOLD_DIR` | `~/.ssh/hold` | CLI metadata and socket directory |
 | `SSH_HOLD_WEB_DATA_DIR` | Project `data/` directory | SQLite and uploaded private-key storage |
+| `SSH_HOLD_PUBLIC_DIR` | `desktop/backend/public`, falling back to `public` | Prepared browser resources |
 
 ```sh
 PORT=8888 SSH_HOLD_WEB_DATA_DIR="$HOME/.local/share/ssh-hold-deck" npm start
@@ -106,17 +108,17 @@ npm ci
 npm test
 ```
 
-Tests use mocked dependencies and temporary directories rather than real JumpServer credentials. Terminal tests require a working `node-pty` installation.
+Tests launch the Rust backend with mocked SSH commands and temporary directories. Compatibility tests verify existing JavaScript credential and backup formats without real JumpServer credentials.
 
-Main modules: `src/server.js` (HTTP, SQLite, channel operations), `src/auth.js` (login), `src/jump.js` (jump routing), `src/jumpserver.js` (bastion API), `src/terminal-server.js` (PTY/WebSocket), and `public/` (frontend).
+Main modules are under `backend-rust/src/`: `lib.rs` (HTTP and authentication), `store.rs` (SQLite), `channels.rs` (SSH operations), `jumpserver.rs` (bastion API), and `terminal.rs` (PTY/WebSocket). `public/` contains the frontend. After compilation and asset preparation, run `./backend-rust/target/release/ssh-hold-backend` directly, without Node or npm. Set `SSH_HOLD_PUBLIC_DIR` when deploying the prepared `desktop/backend/public` directory elsewhere. Existing SQLite data, password hashes and encrypted credentials are reused on the same user and host.
 
 ## Troubleshooting
 
 | Problem | What to check |
 | --- | --- |
 | ssh-hold not found | Ensure the service PATH includes the CLI; run `ssh-hold list` in the same environment |
-| node:sqlite unavailable | Upgrade to Node.js 22.13.0 or later |
-| PTY startup failure | Reinstall with `npm ci`, run `node scripts/setup-pty.js`, and install native build tools if needed |
+| Browser resources missing | Run `npm run web:prepare` or point `SSH_HOLD_PUBLIC_DIR` to prepared resources |
+| PTY startup failure | Check that ssh-hold is executable and the operating system permits PTY allocation |
 | Connect button disabled | Edit the channel to provide a username, host, and password or private-key path |
 | Jump unavailable | Connect the jump channel first; Reload its metadata if needed |
 | Terminal rejected | Use localhost or the server LAN IP, sign in again, and confirm that the channel is connected |

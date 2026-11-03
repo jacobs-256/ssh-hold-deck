@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
-import { validOrigin } from '../../src/request-origin.js';
+import { validOrigin } from '../compat/request-origin.js';
 
 test('accept local interfaces with matching origin; reject foreign hosts, origins and ports', () => {
   const addresses = ['127.0.0.1', 'localhost', '[::1]', os.hostname(), ...Object.values(os.networkInterfaces()).flat().filter(Boolean).filter(entry => entry.family === 'IPv4').map(entry => entry.address)];

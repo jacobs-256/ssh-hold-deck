@@ -100,7 +100,7 @@ struct Backend {
 impl Backend {
     fn stop(&self) {
         if let Some(mut child) = self.child.lock().unwrap().take() {
-            // EOF is observed inside Node, including across the WSL launcher.
+            // The Rust backend shuts down when its desktop owner's stdin closes.
             drop(child.stdin.take());
             for _ in 0..50 {
                 if child.try_wait().ok().flatten().is_some() { return; }
@@ -137,9 +137,10 @@ fn backend_command(app: &tauri::AppHandle, token: &str) -> Result<Command, Strin
     {
         let data = app.path().app_data_dir().map_err(|e| e.to_string())?.join("data");
         std::fs::create_dir_all(&data).map_err(|e| e.to_string())?;
-        let mut command = Command::new(backend.join("runtime/node"));
-        command.arg(backend.join("backend-entry.mjs")).current_dir(&backend)
-            .env("HOST", "127.0.0.1").env("SSH_HOLD_DESKTOP_TOKEN", token)
+        let mut command = Command::new(std::env::current_exe().map_err(|e| e.to_string())?);
+        command.arg("--backend").current_dir(&backend)
+            .env("SSH_HOLD_PUBLIC_DIR", backend.join("public"))
+            .env("SSH_HOLD_DESKTOP", "1").env("HOST", "127.0.0.1").env("SSH_HOLD_DESKTOP_TOKEN", token)
             .env("SSH_HOLD_WEB_DATA_DIR", data);
         Ok(command)
     }
@@ -204,6 +205,10 @@ fn start_backend(app: tauri::AppHandle, state: Arc<Backend>) -> Result<(), Strin
 }
 
 fn main() {
+    if std::env::args().any(|arg|arg=="--backend") {
+        if let Err(error)=tauri::async_runtime::block_on(ssh_hold_backend::run()) {eprintln!("{error}");std::process::exit(1);}
+        return;
+    }
     let backend = Arc::new(Backend::default());
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { jumpOptions } from '../../src/jump.js';
+import { jumpOptions } from '../compat/jump.js';
 
 test('direct connection and existing jump socket', async () => {
   assert.deepEqual(await jumpOptions({name:'target'}, {}, '/tmp/hold'), []);
