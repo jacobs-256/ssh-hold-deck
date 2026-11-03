@@ -207,9 +207,6 @@ jobs:
       - name: Prepare native macOS backend
         if: runner.os == 'macOS'
         run: npm run desktop:prepare
-      - name: Verify native macOS backend
-        if: runner.os == 'macOS'
-        run: npm run desktop:verify
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         if: runner.os == 'Windows'
         with:
@@ -255,6 +252,9 @@ jobs:
       - name: Verify macOS application identity and signature
         if: runner.os == 'macOS'
         run: node scripts/verify-macos-bundle.mjs
+      - name: Verify packaged macOS backend
+        if: runner.os == 'macOS'
+        run: npm run desktop:verify -- 'src-tauri/target/release/bundle/macos/SSH Hold Deck.app/Contents/Resources/backend'
       - name: Collect installer and checksum
         env:
           TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY || secrets.TAURI_UPDATER_PUBLIC_KEY }}

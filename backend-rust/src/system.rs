@@ -312,16 +312,24 @@ fn agent_home() -> PathBuf {
 }
 fn agents() -> Vec<Agent> {
     let home = agent_home();
-    let config = std::env::var_os("XDG_CONFIG_HOME")
+    let windows = std::env::var_os("SSH_HOLD_WINDOWS_HOME").is_some();
+    let agent_env = |name: &str| {
+        if windows {
+            None
+        } else {
+            std::env::var_os(name)
+        }
+    };
+    let config = agent_env("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| home.join(".config"));
-    let codex = std::env::var_os("CODEX_HOME")
+    let codex = agent_env("CODEX_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| home.join(".codex"));
-    let claude = std::env::var_os("CLAUDE_CONFIG_DIR")
+    let claude = agent_env("CLAUDE_CONFIG_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| home.join(".claude"));
-    let dsh = std::env::var_os("DSH_HOME")
+    let dsh = agent_env("DSH_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| home.join(".dsh"));
     vec![
@@ -415,6 +423,9 @@ fn agents() -> Vec<Agent> {
 }
 impl Agent {
     fn detected(&self) -> bool {
+        if std::env::var_os("SSH_HOLD_WINDOWS_HOME").is_some() {
+            return self.config.exists();
+        }
         self.config.exists()
             || self.commands.iter().any(|c| find_cli(c).is_some())
             || self.apps.iter().any(|a| {

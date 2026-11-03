@@ -1,5 +1,7 @@
 # SSH Hold Deck
 
+已有安装的数据迁移、服务部署与回滚见 [Rust 迁移与运维说明](docs/MIGRATION.md)。
+
 [English](README.md) | **简体中文**
 
 本项目基于开源工具 [ssh-hold](https://github.com/CherryLover/ssh-hold)，使用 Rust 提供 HTTP API、SQLite 配置存储、登录认证、JumpServer 集成及 PTY/WebSocket 多标签终端。SSH 通道的创建、复用和生命周期管理仍由 ssh-hold 负责，程序运行不再依赖 Node.js。

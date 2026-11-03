@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 
 export const binary = path.resolve(process.env.SSH_HOLD_TEST_BINARY || 'backend-rust/target/debug/ssh-hold-backend');
-export async function fixture(t, prepare = async () => {}) {
+export async function fixture(t, prepare = async () => {}, environment = {}) {
   const home = await mkdtemp(path.join(os.tmpdir(), 'deck-rust-api-'));
   await mkdir(path.join(home, 'bin'));
   await prepare(home);
@@ -29,7 +29,7 @@ export async function fixture(t, prepare = async () => {}) {
         SSH_HOLD_WEB_DATA_DIR: path.join(home, 'data'), SSH_HOLD_DIR: path.join(home, 'hold'),
         CODEX_HOME: path.join(home, '.codex'), CLAUDE_CONFIG_DIR: path.join(home, '.claude'),
         XDG_CONFIG_HOME: path.join(home, '.config'), DSH_HOME: path.join(home, '.dsh'),
-        PATH: `${home}/bin:${process.env.PATH}` }, stdio: ['ignore', 'pipe', 'pipe'],
+        PATH: `${home}/bin:${process.env.PATH}`, ...environment }, stdio: ['ignore', 'pipe', 'pipe'],
     });
     base = await new Promise((resolve, reject) => {
       let output = ''; const timer = setTimeout(() => reject(Error('Rust startup timed out: ' + output)), 15000);

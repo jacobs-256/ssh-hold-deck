@@ -5,13 +5,15 @@ import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 
-await import('./check-desktop-resources.mjs');
+const { checkDesktopResources } = await import('./check-desktop-resources.mjs');
 const root=path.resolve(process.argv[2]||'desktop/backend');
+await checkDesktopResources(root);
 const manifest=JSON.parse(await readFile(path.join(root,'desktop-manifest.json'),'utf8'));
 assert.equal(manifest.backend,'rust');
 await assert.rejects(access(path.join(root,'runtime/node')));
 const bundled=root.includes('.app/Contents/Resources/');
-const binary=bundled?path.resolve(root,'../../MacOS/ssh-hold-deck'):path.resolve('backend-rust/target/release/ssh-hold-backend');
+assert(bundled || manifest.platform === 'linux', 'Verify macOS using the built .app resource directory; Linux uses its packaged executable.');
+const binary=bundled?path.resolve(root,'../../MacOS/ssh-hold-deck'):path.join(root,'ssh-hold-backend');
 const home=await mkdtemp(path.join(os.tmpdir(),'deck-rust-check-'));
 await mkdir(path.join(home,'hold'));
 const token='rust-desktop-verification';

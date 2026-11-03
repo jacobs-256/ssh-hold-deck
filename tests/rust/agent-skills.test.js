@@ -6,7 +6,19 @@ import { access, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
-import { binary } from './helpers.js';
+import { binary, fixture } from './helpers.js';
+
+test('Windows agent management ignores WSL configuration directories', async t => {
+  const windows = await mkdtemp(path.join(os.tmpdir(), 'deck-windows-home-'));
+  t.after(() => rm(windows, { recursive: true, force: true }));
+  const app = await fixture(t, home => mkdir(path.join(home, '.claude')), { SSH_HOLD_WINDOWS_HOME: windows });
+  await app.setup();
+  assert.equal((await app.api('/api/system/agent-skills/claude', {})).response.status, 404);
+  await mkdir(path.join(windows, '.claude'));
+  assert.equal((await app.api('/api/system/agent-skills/claude', {})).response.status, 200);
+  await access(path.join(windows, '.claude/skills/ssh-hold/SKILL.md'));
+  await assert.rejects(access(path.join(app.home, '.claude/skills/ssh-hold/SKILL.md')));
+});
 
 test('agent skill routes require authentication, same-origin mutations and explicit uninstall confirmation', { timeout: 15000 }, async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'deck-agent-api-'));

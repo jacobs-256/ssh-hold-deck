@@ -17,7 +17,7 @@ Node executable or Node modules are loaded by the running application.
 | `public/` | Browser interface and static assets |
 | `src-tauri/` | Desktop lifecycle, windows, tray and updater |
 | `tests/rust/` | HTTP/SQLite/PTY integration tests against the Rust executable |
-| `tests/compat/` | Previous algorithms used only as compatibility test oracles |
+| `tests/compat/` | Previous implementation for compatibility oracles and legacy JS regression tests |
 
 Run `npm ci` and `npm run web:prepare` to prepare browser vendor bundles. Run
 `npm start` to compile and start Rust, or launch the release executable directly.

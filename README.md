@@ -34,6 +34,8 @@ Use a compatible version supporting `list`, `status <name>`, `start`, `stop <nam
 
 ## Quick Start
 
+For existing installations, see [Rust migration and service operations](docs/MIGRATION.md).
+
 From the cloned project directory:
 
 ```sh

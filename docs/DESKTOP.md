@@ -12,8 +12,8 @@ Prerequisites: Node 24.22.0, Rust 1.90 or later, and Xcode Command Line Tools.
 ```sh
 npm ci
 npm run desktop:prepare
-npm run desktop:verify
 npm run desktop:build -- --bundles app,dmg -- --locked
+npm run desktop:verify -- 'src-tauri/target/release/bundle/macos/SSH Hold Deck.app/Contents/Resources/backend'
 ```
 
 Outputs are under `src-tauri/target/release/bundle/`. `npm run desktop:dev`
@@ -25,7 +25,8 @@ executable in `--backend` child mode; no separate backend binary is bundled.
 For Windows, prepare on Linux and include the Linux Rust executable for WSL2.
 No Node runtime, node_modules or node-pty binaries are included. Node is used
 only for build tooling and development tests. Run `npm run desktop:verify`
-after preparation to check authentication, SQLite, resources and shutdown.
+against the built macOS app resource directory (or prepared Linux bundle) to
+check authentication, SQLite, resources and shutdown.
 
 ## macOS Background Service
 
@@ -66,7 +67,8 @@ not replace this data. SSH configuration and sockets use the WSL user's `~/.ssh`
 
 In the Windows desktop build, Agent skill management targets the Windows user's
 home directory mounted in WSL (`/mnt/c/Users/...`). It discovers Windows Agent
-configuration directories and skill paths, not WSL Agent installations. Standalone
+configuration directories and skill paths, ignoring WSL environment overrides
+and Linux PATH executables. Standalone
 CLI tools that have never created a configuration directory may not be detected.
 Displayed paths are the WSL-mounted paths actually used by the backend.
 
@@ -251,5 +253,6 @@ link and allow retrying. Database and key files stay in the separate data folder
 The local Apple Silicon checks verify SQLite, Rust PTY/WebSocket behavior,
 HTTP resources and clean shutdown when the desktop owner closes stdin. Rust
 unit tests and the development HTTP test suite also run locally. macOS Intel and Windows
-installer generation are configured for GitHub runners and need their first CI
-run; no workflow has been pushed or Release published automatically.
+installer generation are configured in the committed GitHub workflows. Confirm
+actual CI results and test on real Windows/WSL before declaring those platforms
+verified; local macOS checks do not establish Windows compatibility.

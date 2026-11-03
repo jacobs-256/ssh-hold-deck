@@ -23,5 +23,10 @@ jobs:
       - run: npm test
       - run: npm run desktop:prepare
       - run: npm run desktop:verify
+        if: runner.os == 'Linux'
+      - run: npm run desktop:build -- --bundles app -- --locked
+        if: runner.os == 'macOS'
+      - run: npm run desktop:verify -- 'src-tauri/target/release/bundle/macos/SSH Hold Deck.app/Contents/Resources/backend'
+        if: runner.os == 'macOS'
       - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
         if: runner.os == 'macOS'
