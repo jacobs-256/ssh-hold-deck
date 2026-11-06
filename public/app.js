@@ -1,4 +1,8 @@
 const $=s=>document.querySelector(s);let data=[];let editing=null;const connecting=new Set();
+const noteLabel=document.createElement('label');
+noteLabel.innerHTML=I18n.html('备注<input name="note" maxlength="500" placeholder="例如：生产数据库、测试环境">');
+$('#form').elements.name.closest('label').after(noteLabel);
+$('#form').addEventListener('reset',()=>{queueMicrotask(()=>{$('#form').elements.note.value=data.find(channel=>channel.name===editing)?.note||'';});});
 const platformTooltip=document.createElement('div');platformTooltip.id='platform-tooltip';platformTooltip.className='platform-tooltip';platformTooltip.setAttribute('role','tooltip');platformTooltip.hidden=true;document.body.append(platformTooltip);
 let tooltipAnchor;
 function hidePlatformTooltip(){tooltipAnchor?.removeAttribute('aria-describedby');tooltipAnchor=null;platformTooltip.hidden=true;}
@@ -116,6 +120,7 @@ function render(){
     if(!row||row.dataset.snapshot!==signature){
       const template=document.createElement('template');template.innerHTML=`<table><tbody>${rowHtml(channel)}</tbody></table>`;const replacement=template.content.querySelector('tr');replacement.dataset.snapshot=signature;
       replacement.cells[1].querySelector('.subtext')?.remove();
+      if(channel.note){const note=document.createElement('span');note.className='subtext channel-note';note.textContent=channel.note;replacement.cells[1].append(note);}
       replacement.querySelector('.actions button').classList.add('terminal-action');
       const power=replacement.querySelector('.connect-button');
       power.dataset.state=power.disabled?'unavailable':channel.status==='畅通'?'connected':'disconnected';

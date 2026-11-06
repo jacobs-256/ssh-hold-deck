@@ -182,6 +182,7 @@ impl App {
                 "jump",
                 "operatingSystem",
                 "architecture",
+                "note",
             ] {
                 if key != "started" || value[key].is_null() {
                     value[key] = json!(s(&c, key));
@@ -667,12 +668,26 @@ pub async fn api(
     if create && (old.is_some() || app.hold.join(&name).join("meta").exists()) {
         return Err(Error::status(409, "通道名称已存在，请使用其他名称"));
     }
-    let config = if create || *method == Method::PUT {
+    let previous_note = old
+        .as_ref()
+        .map(|config| s(config, "note").to_owned())
+        .unwrap_or_default();
+    let mut config = if create || *method == Method::PUT {
         app.identity(&mut body)?;
         app.config_input(&body, &old.unwrap_or(json!({}))).await?
     } else {
         old.unwrap()
     };
+    if create || *method == Method::PUT {
+        let note = match body.get("note") {
+            Some(value) => value.as_str().ok_or_else(|| Error::bad("备注格式无效"))?,
+            None => &previous_note,
+        };
+        if note.chars().count() > 500 {
+            return Err(Error::bad("备注不能超过 500 个字符"));
+        }
+        config["note"] = json!(note.trim());
+    }
     let a = availability(&config);
     if a["canConnect"] != true {
         return Err(Error::bad(s(&a, "connectDisabledReason")));

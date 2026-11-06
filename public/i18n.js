@@ -63,6 +63,8 @@
     '刷新': 'Refresh', '＋ 添加通道': '+ Add Channel', '全部通道': 'All Channels', '畅通': 'Connected',
     '已断开': 'Disconnected', '未知': 'Unknown', '连接失败': 'Connection Failed', '停了': 'Stopped',
     '通道名称': 'Channel Name', '目标地址': 'Destination', '跳板机': 'Gateway', '认证方式': 'Authentication',
+    '备注':'Notes', '例如：生产数据库、测试环境':'e.g. Production database, test environment',
+    '备注格式无效':'Invalid notes format', '备注不能超过 500 个字符':'Notes must not exceed 500 characters',
     '状态': 'Status', '保活': 'Keepalive', '开通时间': 'Opened', '操作': 'Actions',
     '新增通道': 'Add Channel', '编辑通道': 'Edit Channel', '例如 prod-us-01': 'e.g. prod-us-01',
     '用户名': 'Username', '例如 root': 'e.g. root', '主机': 'Host', 'IP 地址或域名': 'IP address or hostname',
