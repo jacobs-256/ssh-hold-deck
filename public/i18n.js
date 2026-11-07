@@ -85,6 +85,7 @@
     '连接来源': 'Connection Source', '手动配置': 'Manual', 'JumpServer 资产': 'JumpServer Asset',
     '配置 JumpServer': 'Configure JumpServer', 'JumpServer 配置': 'JumpServer Settings', '资产搜索': 'Asset Search',
     '启用 JumpServer': 'Enable JumpServer', '停用 JumpServer': 'Disable JumpServer', '请先配置 JumpServer': 'Configure JumpServer first',
+    '收起侧栏': 'Collapse sidebar', '展开侧栏': 'Expand sidebar',
     '启用 JumpServer 失败，请重试': 'Could not enable JumpServer. Try again.', 'JumpServer 启用状态无效': 'Invalid JumpServer enabled state',
     'JumpServer 集成已停用，请先启用后再编辑该通道': 'JumpServer integration is disabled. Enable it before editing this channel.',
     'JumpServer 集成已停用，启用后可连接或编辑': 'JumpServer integration is disabled. Enable it to connect or edit.',

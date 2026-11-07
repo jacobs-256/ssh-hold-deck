@@ -6,7 +6,7 @@ use std::{
     io::{BufRead, BufReader},
     path::PathBuf,
     process::{Child, Command, Stdio},
-    sync::{Arc, Mutex},
+    sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex},
     time::Duration,
 };
 use tauri::{Manager, WebviewUrl};
@@ -95,10 +95,13 @@ struct Backend {
     child: Mutex<Option<Child>>,
     port: Mutex<Option<u16>>,
     error: Mutex<Option<String>>,
+    stopping: AtomicBool,
 }
 
 impl Backend {
     fn stop(&self) {
+        // Intentional shutdowns (quit or update restart) must not surface as a crash.
+        self.stopping.store(true, Ordering::Release);
         if let Some(mut child) = self.child.lock().unwrap().take() {
             // The Rust backend shuts down when its desktop owner's stdin closes.
             drop(child.stdin.take());
@@ -170,6 +173,7 @@ fn show_error(app: &tauri::AppHandle, error: &str) {
 }
 
 fn start_backend(app: tauri::AppHandle, state: Arc<Backend>) -> Result<(), String> {
+    state.stopping.store(false, Ordering::Release);
     let token = uuid::Uuid::new_v4().to_string();
     let mut command = backend_command(&app, &token)?;
     let logs = app.path().app_log_dir().map_err(|e| e.to_string())?;
@@ -195,7 +199,9 @@ fn start_backend(app: tauri::AppHandle, state: Arc<Backend>) -> Result<(), Strin
             }
         }
         *reader_state.port.lock().unwrap() = None;
-        show_error(&reader_app, "The backend exited. Check backend.log in the application log directory.");
+        if !reader_state.stopping.load(Ordering::Acquire) {
+            show_error(&reader_app, "The backend exited. Check backend.log in the application log directory.");
+        }
     });
     let port = receiver.recv_timeout(Duration::from_secs(90)).map_err(|_| "Backend startup timed out. Check backend.log; on Windows verify WSL2 is initialized.".to_string())?;
     if let Some(window) = app.get_webview_window("main") {

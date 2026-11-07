@@ -415,3 +415,28 @@ html body.ui-aligned .copy-status {background:var(--surface);color:var(--seconda
  .workspace .filters .search {flex-basis:100%}.workspace .filters select {flex:1 1 calc(50% - 8px);width:100px}
  .workspace footer {height:auto;min-height:38px;flex-wrap:wrap;gap:6px;padding-block:4px}
 }
+/* Collapsible sidebar */
+.sidebar .account-settings {align-items:center;gap:4px}
+.sidebar .account-settings .settings-toggle {width:auto;flex:1;min-width:0}
+.sidebar-collapse {display:grid;place-items:center;width:32px;height:32px;flex:0 0 32px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}
+.sidebar-collapse:hover {background:var(--hover);color:var(--text)}
+.sidebar-collapse svg {width:16px;height:16px}
+@media(min-width:901px) {
+  body.sidebar-collapsed>.sidebar {width:72px;padding:14px 5px 12px;overflow:visible}
+  body.sidebar-collapsed>main {margin-left:72px;width:calc(100% - 72px)}
+  body.sidebar-collapsed .logo {justify-content:center;padding:0 0 14px}
+  body.sidebar-collapsed .logo>div {display:none}
+  body.sidebar-collapsed .side-label {display:none}
+  body.sidebar-collapsed nav button {justify-content:center;padding:8px 0}
+  body.sidebar-collapsed nav button>span {display:none}
+  body.sidebar-collapsed .integration-row {gap:0}
+  body.sidebar-collapsed .integration-row .integration-switch {display:none}
+  body.sidebar-collapsed .integration-nav button {justify-content:center;padding:8px 0;width:100%}
+  body.sidebar-collapsed .account-settings {flex-direction:column;justify-content:center;gap:4px}
+  body.sidebar-collapsed .account-settings .settings-toggle {width:28px;height:28px;min-height:28px;flex:0 0 28px;padding:0;justify-content:center;gap:0}
+  body.sidebar-collapsed .settings-toggle>span {display:none}
+  body.sidebar-collapsed .sidebar-collapse {width:28px;height:28px;flex:0 0 28px}
+  body.sidebar-collapsed .account-menu {left:0;right:auto}
+  body.sidebar-collapsed .terminal-panel:not(.fullscreen) {left:72px}
+}
+@media(max-width:900px) {.sidebar-collapse {display:none}}

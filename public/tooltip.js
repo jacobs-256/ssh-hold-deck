@@ -68,8 +68,16 @@
     tooltip.hidden = false;
     element.setAttribute('aria-describedby', tooltip.id);
     const rect = element.getBoundingClientRect(), box = tooltip.getBoundingClientRect();
-    tooltip.style.left = `${Math.max(8, Math.min(innerWidth - box.width - 8, rect.left + rect.width / 2 - box.width / 2))}px`;
-    tooltip.style.top = `${rect.top >= box.height + 14 ? rect.top - box.height - 8 : Math.min(innerHeight - box.height - 8, rect.bottom + 8)}px`;
+    const sidebar = element.closest('.sidebar');
+    if (sidebar && (document.body.classList.contains('sidebar-collapsed') || sidebar.getBoundingClientRect().width <= 100)) {
+      const left = Math.min(innerWidth - box.width - 8, rect.right + 8);
+      const top = Math.max(8, Math.min(innerHeight - box.height - 8, rect.top + rect.height / 2 - box.height / 2));
+      tooltip.style.left = `${Math.max(8, left)}px`;
+      tooltip.style.top = `${top}px`;
+    } else {
+      tooltip.style.left = `${Math.max(8, Math.min(innerWidth - box.width - 8, rect.left + rect.width / 2 - box.width / 2))}px`;
+      tooltip.style.top = `${rect.top >= box.height + 14 ? rect.top - box.height - 8 : Math.min(innerHeight - box.height - 8, rect.bottom + 8)}px`;
+    }
   }
   const target = node => {
     if (!(node instanceof Element)) return null;
