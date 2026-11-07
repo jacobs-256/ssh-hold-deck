@@ -11,7 +11,7 @@ A Rust web management service built on top of the open-source [ssh-hold](https:/
 - Use an existing connected channel as a jump host by reusing its ControlMaster socket.
 - Read lists directly from SQLite; configure background status checks under Settings → Refresh Settings (5–3600 seconds, default 30). Changes are pushed to open pages through SSE and update affected rows automatically; manual refresh checks immediately.
 - Paginated channels (10/20/50/100 rows, default 20), newest first, with independently scrolling rows, a fixed table header, and pinned actions.
-- Import `~/.ssh/hold/*/meta` through Reload, updating existing names while retaining saved credentials.
+- Use the toolbar import button to import `~/.ssh/hold/*/meta`, updating existing names while retaining saved credentials.
 - Multi-tab xterm.js terminals, including multiple shells per channel, resizing, collapsing, and fullscreen.
 - Password-protected web access, password changes, logout, and English/Simplified Chinese interface options.
 - JumpServer configuration, authorized asset search, account selection, and connection-token authentication.
@@ -58,7 +58,7 @@ The service binds to `0.0.0.0` for trusted LAN access. Other computers can use `
 
 First startup imports CLI metadata and migrates credentials from the previous `.web-vault`, retaining the original file. Lists are read from SQLite without waiting for remote probes.
 
-- **Reload** imports current metadata, updating matching names without duplicates and preserving saved passwords and identity paths. Database records remain when source files disappear.
+- **Import** uses the toolbar button next to Refresh to import current metadata, updating matching names without duplicates and preserving saved passwords and identity paths. Database records remain when source files disappear.
 - **Refresh** checks live connection status without importing configuration.
 - CLI metadata does not contain passwords or private-key paths. Imported channels may need editing before their connect button becomes available.
 - Background probes update SQLite; an already-open page does not automatically poll the list.
@@ -74,6 +74,8 @@ Connected channels can open independent terminal tabs. Closing a tab ends its sh
 ### JumpServer
 
 Configure an HTTPS API URL, Access Key ID/Secret, organization UUID, and SSH gateway host/port in the JumpServer view. API and SSH ports are independent. Leaving Secret blank while editing retains it only when the URL and Key ID are unchanged.
+
+The JumpServer switch under Integrations enables or disables the integration. When off, the connection source field is hidden when adding or editing channels; already-connected JumpServer channels remain usable but must be re-enabled before editing. Turning it on without a saved configuration opens the configuration dialog immediately. While disabled, disconnected JumpServer channels are shown disabled, cannot connect, open a terminal, or be edited, but can still be deleted; connected channels remain usable and enter this state after disconnecting. The state is stored in the local configuration and included in configuration backups.
 
 Choose a JumpServer asset when creating a channel, search authorized assets, and select an eligible account. Every connection obtains a fresh ordinary connection token for KoKo authentication. Channels retain asset/account references rather than temporary tokens. The integration was verified against **JumpServer v4.10.19 CE**. Accounts requiring manual credential entry are excluded; approval, extra authentication, and access restrictions require handling in JumpServer. Referenced JumpServer configurations cannot be deleted.
 
@@ -122,7 +124,7 @@ Main modules are under `backend-rust/src/`: `lib.rs` (HTTP and authentication), 
 | Browser resources missing | Run `npm run web:prepare` or point `SSH_HOLD_PUBLIC_DIR` to prepared resources |
 | PTY startup failure | Check that ssh-hold is executable and the operating system permits PTY allocation |
 | Connect button disabled | Edit the channel to provide a username, host, and password or private-key path |
-| Jump unavailable | Connect the jump channel first; Reload its metadata if needed |
+| Jump unavailable | Connect the jump channel first; use the import button to import its metadata if needed |
 | Terminal rejected | Use localhost or the server LAN IP, sign in again, and confirm that the channel is connected |
 | Connected but keepalive stopped | The SSH master and extra keepalive process are independent; Refresh to verify current status |
 

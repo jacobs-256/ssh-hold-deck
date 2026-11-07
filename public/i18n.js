@@ -84,6 +84,11 @@
     '正在断开...': 'Disconnecting...', '正在连接...': 'Connecting...',
     '连接来源': 'Connection Source', '手动配置': 'Manual', 'JumpServer 资产': 'JumpServer Asset',
     '配置 JumpServer': 'Configure JumpServer', 'JumpServer 配置': 'JumpServer Settings', '资产搜索': 'Asset Search',
+    '启用 JumpServer': 'Enable JumpServer', '停用 JumpServer': 'Disable JumpServer', '请先配置 JumpServer': 'Configure JumpServer first',
+    '启用 JumpServer 失败，请重试': 'Could not enable JumpServer. Try again.', 'JumpServer 启用状态无效': 'Invalid JumpServer enabled state',
+    'JumpServer 集成已停用，请先启用后再编辑该通道': 'JumpServer integration is disabled. Enable it before editing this channel.',
+    'JumpServer 集成已停用，启用后可连接或编辑': 'JumpServer integration is disabled. Enable it to connect or edit.',
+    'JumpServer 已停用': 'JumpServer disabled', '已停用': 'Disabled',
     '名称或 IP 地址': 'Name or IP address', '搜索资产': 'Search Assets', '服务器资产': 'Server Asset',
     '上一页': 'Previous Page', '下一页': 'Next Page', '登录账号': 'Account', '请选择 JumpServer': 'Select JumpServer',
     '请先选择资产': 'Select an asset first', '读取账号中…': 'Loading accounts…', '请选择账号': 'Select an account',
@@ -258,7 +263,8 @@
     window.dispatchEvent(new CustomEvent('app-languagechange', { detail: { language, preference } }));
   }
   window.addEventListener('languagechange', () => { if (preference === 'auto') setLanguage('auto'); });
-  window.I18n = { t, html, translate, get language() { return language; }, get preference() { return preference; }, setLanguage, mountPicker: root => root.append(picker) };
+  const attribute = value => t(sources.get(value) || value);
+  window.I18n = { t, html, translate, attribute, get language() { return language; }, get preference() { return preference; }, setLanguage, mountPicker: root => root.append(picker) };
   document.body.append(picker); lucide.createIcons();
   const systemTheme = matchMedia('(prefers-color-scheme: dark)');
   let themePreference = 'auto';

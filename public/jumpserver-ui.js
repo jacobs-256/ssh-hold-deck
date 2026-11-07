@@ -19,17 +19,44 @@ function createJumpServerUI({ api, showMessage, changed }) {
     <label>登录账号<select name="account" required></select></label>`);
   manual.before(region);
   const source = form.elements.source, serverSelect = form.elements.serverId;
+  const sourceLabel = source.closest('label');
   const assetSelect = form.elements.assetId, accountSelect = form.elements.account;
   const pagination = region.querySelector('.asset-pagination span');
   let servers = [], offset = 0, count = 0, assetRequest = 0, accountRequest = 0, openRequest = 0, debounce;
   let selection = null;
   const settingsButton = document.querySelector('#jumpserver-menu');
+  const enabledSwitch = document.querySelector('#jumpserver-enabled');
+  const enabledLabel = enabledSwitch?.closest('label');
+  let enabled = false, enabledKnown = false, announcedEnabled = null, switchBusy = true, pendingEnable = false;
   document.querySelector('#auth-filter').insertAdjacentHTML('beforeend', '<option value="jumpserver">JumpServer</option>');
 
+  function syncEnabled() {
+    const shown = pendingEnable || enabled;
+    if (enabledSwitch) {
+      enabledSwitch.checked = shown;
+      enabledSwitch.disabled = switchBusy;
+      const action = I18n.t(shown ? '停用 JumpServer' : '启用 JumpServer');
+      enabledSwitch.setAttribute('aria-label', action);
+      enabledLabel?.setAttribute('title', action);
+    }
+    const existing = source.querySelector('option[value="jumpserver"]');
+    if (enabled) {
+      if (!existing) source.insertAdjacentHTML('beforeend', I18n.html('<option value="jumpserver">JumpServer 资产</option>'));
+    } else if (existing) {
+      if (source.value === 'jumpserver') source.value = 'manual';
+      existing.remove();
+    }
+    sourceLabel.hidden = !source.querySelector('option[value="jumpserver"]');
+    if (enabledKnown && announcedEnabled !== enabled) {
+      announcedEnabled = enabled;
+      window.dispatchEvent(new CustomEvent('jumpserver-enabled-change', { detail: { enabled } }));
+    }
+  }
   function apply() {
-    const enabled = source.value === 'jumpserver';
-    manual.hidden = enabled; manual.disabled = enabled;
-    region.hidden = !enabled; region.disabled = !enabled;
+    syncEnabled();
+    const jumpserverSource = source.value === 'jumpserver';
+    manual.hidden = jumpserverSource; manual.disabled = jumpserverSource;
+    region.hidden = !jumpserverSource; region.disabled = !jumpserverSource;
     changed();
   }
   function updateServers(preferred) {
@@ -38,7 +65,25 @@ function createJumpServerUI({ api, showMessage, changed }) {
   }
   async function refreshServers(preferred) {
     const result = await api('/api/jumpservers'); servers = result.servers;
-    updateServers(preferred);
+    if (!pendingEnable && typeof result.enabled === 'boolean') { enabled = result.enabled; enabledKnown = true; }
+    updateServers(preferred); syncEnabled();
+    return result;
+  }
+  async function changeEnabled(next, { quiet = false } = {}) {
+    const previous = enabled;
+    enabled = next; switchBusy = true; syncEnabled();
+    try {
+      const result = await api('/api/jumpservers/enabled', { method: 'POST', body: JSON.stringify({ enabled: next }) });
+      enabled = result.enabled === true;
+      enabledKnown = true;
+      return true;
+    } catch (error) {
+      enabled = previous;
+      if (!quiet) await showMessage(error.message);
+      return false;
+    } finally {
+      switchBusy = false; syncEnabled();
+    }
   }
   function clearSelection() {
     selection = null; assetSelect.replaceChildren(); accountSelect.innerHTML = I18n.html('<option value="">请先选择资产</option>');
@@ -113,6 +158,7 @@ function createJumpServerUI({ api, showMessage, changed }) {
   </form>`);
   document.body.append(dialog);
   const settingsForm = dialog.querySelector('form'), status = dialog.querySelector('.settings-status');
+  const closeButton = dialog.querySelector('[data-action=close]');
   let settingsBusy = false;
   const secretInput=settingsForm.elements.keySecret;
   const secretControls=document.createElement('div');secretControls.className='secret-controls';secretInput.before(secretControls);secretControls.append(secretInput);
@@ -183,7 +229,10 @@ function createJumpServerUI({ api, showMessage, changed }) {
     try {
       await refreshServers(serverSelect.value);
       settingsOptions(serverSelect.value || servers[0]?.id || ''); dialog.showModal(); settingsButton.setAttribute('aria-expanded', 'true'); lucide.createIcons();
-    } catch (e) { await showMessage(e.message); }
+    } catch (e) {
+      if (pendingEnable) { pendingEnable = false; syncEnabled(); }
+      await showMessage(e.message);
+    }
   };
   settingsForm.elements.saved.onchange = () => populateSettings(settingsForm.elements.saved.value);
   region.querySelector('[data-action=configure]').onclick = () => settingsButton.click();
@@ -194,9 +243,12 @@ function createJumpServerUI({ api, showMessage, changed }) {
     organizationDebounce = setTimeout(() => loadOrganizations(''), 500);
   });
   settingsForm.elements.url.addEventListener('change', () => { if (!settingsForm.elements.sshHost.value) { try { settingsForm.elements.sshHost.value = new URL(settingsForm.elements.url.value).hostname; } catch {} } });
-  dialog.querySelector('[data-action=close]').onclick = () => dialog.close();
+  closeButton.onclick = () => { if (!settingsBusy) dialog.close(); };
   dialog.addEventListener('cancel', event => { if (settingsBusy) event.preventDefault(); });
-  dialog.addEventListener('close', () => { clearTimeout(organizationDebounce); organizationRequest++; organizationsLoading = false; settingsForm.elements.keySecret.value = ''; settingsButton.setAttribute('aria-expanded', 'false'); });
+  dialog.addEventListener('close', () => {
+    if (pendingEnable) { pendingEnable = false; syncEnabled(); }
+    clearTimeout(organizationDebounce); organizationRequest++; organizationsLoading = false; settingsForm.elements.keySecret.value = ''; settingsButton.setAttribute('aria-expanded', 'false');
+  });
   function settingsPayload() { const payload = Object.fromEntries(new FormData(settingsForm)); if(verifiedSecret!==null&&payload.keySecret===verifiedSecret)payload.keySecret='';payload.id = payload.saved; delete payload.saved; return payload; }
   async function settingsAction(action) {
     if (action !== 'delete' && organizationsLoading) { status.textContent = I18n.t('正在读取组织，请稍候'); return; }
@@ -204,6 +256,7 @@ function createJumpServerUI({ api, showMessage, changed }) {
     const payload = settingsPayload();
     if (action === 'delete' && !await showMessage(I18n.t('确定删除该 JumpServer 配置？'), true)) return;
     settingsBusy = true;
+    closeButton.disabled = true;
     const controls = [...settingsForm.elements]; controls.forEach(c => c.disabled = true);
     status.classList.remove('success'); status.textContent = action === 'test' ? I18n.t('正在验证认证和资产权限…') : I18n.t('正在保存…');
     try {
@@ -216,25 +269,60 @@ function createJumpServerUI({ api, showMessage, changed }) {
         await refreshServers(result.server?.id);
         settingsOptions(result.server?.id || '');
         status.textContent = action === 'delete' ? I18n.t('配置已删除') : I18n.t('配置已保存'); status.classList.add('success');
-        if (action === 'save') dialog.close();
+        if (action === 'save') {
+          const activated = pendingEnable ? await changeEnabled(true, { quiet: true }) : true;
+          pendingEnable = false;
+          syncEnabled();
+          dialog.close();
+          if (!activated) await showMessage(I18n.t('启用 JumpServer 失败，请重试'));
+        }
         if (document.querySelector('#modal').open && source.value === 'jumpserver') { offset = 0; await searchAssets(); }
       }
     } catch (e) { status.textContent = e.message; }
-    finally { settingsBusy = false; controls.forEach(c => c.disabled = false); orgSelect.disabled = organizationsLoading; dialog.querySelector('[data-action=delete]').disabled = !settingsForm.elements.saved.value; }
+    finally { settingsBusy = false; closeButton.disabled = false; controls.forEach(c => c.disabled = false); orgSelect.disabled = organizationsLoading; dialog.querySelector('[data-action=delete]').disabled = !settingsForm.elements.saved.value; }
   }
   settingsForm.onsubmit = event => { event.preventDefault(); settingsAction('save'); };
   dialog.querySelector('[data-action=test]').onclick = () => settingsAction('test');
   dialog.querySelector('[data-action=delete]').onclick = () => settingsAction('delete');
+  enabledSwitch?.addEventListener('change', async () => {
+    if (switchBusy) { syncEnabled(); return; }
+    if (!enabledSwitch.checked) { await changeEnabled(false); return; }
+    pendingEnable = true;
+    switchBusy = true; syncEnabled();
+    try {
+      await refreshServers();
+      if (!servers.length) {
+        settingsButton.click();
+        return;
+      }
+      pendingEnable = false;
+      await changeEnabled(true);
+    } catch (error) {
+      pendingEnable = false;
+      await showMessage(error.message);
+    } finally {
+      switchBusy = false; syncEnabled();
+    }
+  });
+  syncEnabled();
+  refreshServers().catch(() => {}).finally(() => { switchBusy = false; syncEnabled(); });
   lucide.createIcons();
   return {
     apply,
+    isEnabled: () => !enabledKnown || enabled,
     async open(row) {
       const request = ++openRequest;
       clearTimeout(debounce); clearSelection(); offset = 0;
+      if (row?.source === 'jumpserver' && !source.querySelector('option[value="jumpserver"]')) source.insertAdjacentHTML('beforeend', I18n.html('<option value="jumpserver">JumpServer 资产</option>'));
       source.value = row?.source === 'jumpserver' ? 'jumpserver' : 'manual'; apply();
       try {
         await refreshServers(row?.serverId);
         if (request !== openRequest || !document.querySelector('#modal').open) return;
+        if (row?.source === 'jumpserver' && !enabled) {
+          document.querySelector('#modal').close();
+          await showMessage(I18n.t('JumpServer 集成已停用，请先启用后再编辑该通道'));
+          return;
+        }
         if (source.value === 'jumpserver') await searchAssets(row);
       } catch (e) { if (request === openRequest) error.textContent = e.message; }
     },

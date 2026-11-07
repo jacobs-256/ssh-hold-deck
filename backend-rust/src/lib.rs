@@ -532,6 +532,7 @@ async fn jump_api(
     let pieces: Vec<_> = path.trim_matches('/').split('/').collect();
     let id = pieces.get(2).copied().unwrap_or("");
     let _settings_lock = if (id.is_empty() && *method == Method::POST)
+        || (id == "enabled" && *method == Method::POST)
         || *method == Method::PUT
         || *method == Method::DELETE
     {
@@ -542,7 +543,7 @@ async fn jump_api(
     if id.is_empty() {
         if *method == Method::GET {
             return Ok(ok(
-                json!({"servers":app.store.servers()?.iter().map(jumpserver::public).collect::<Vec<_>>()}),
+                json!({"servers":app.store.servers()?.iter().map(jumpserver::public).collect::<Vec<_>>(),"enabled":jumpserver::enabled(&app.store)?}),
             ));
         }
         if *method == Method::POST {
@@ -556,6 +557,17 @@ async fn jump_api(
             )
                 .into_response());
         }
+    }
+    if id == "enabled" && *method == Method::POST {
+        let enabled = body["enabled"]
+            .as_bool()
+            .ok_or_else(|| Error::bad("JumpServer 启用状态无效"))?;
+        if enabled && app.store.servers()?.is_empty() {
+            return Err(Error::bad("请先配置 JumpServer"));
+        }
+        app.store
+            .set("jumpserverEnabled", if enabled { "1" } else { "0" })?;
+        return Ok(ok(json!({"enabled":jumpserver::enabled(&app.store)?})));
     }
     if ["test", "organizations"].contains(&id) && *method == Method::POST {
         let previous = if s(&body, "id").is_empty() {
@@ -620,14 +632,20 @@ async fn jump_api(
                     "该 JumpServer 仍被通道使用，请先修改或删除相关通道",
                 ));
             }
-            app.store.save_servers(
-                app.store
-                    .servers()?
-                    .into_iter()
-                    .filter(|s| s["id"] != id)
-                    .collect(),
-            )?;
-            Ok(ok(json!({"ok":true})))
+            let remaining = app
+                .store
+                .servers()?
+                .into_iter()
+                .filter(|s| s["id"] != id)
+                .collect::<Vec<_>>();
+            let empty = remaining.is_empty();
+            app.store.save_servers(remaining)?;
+            if empty {
+                app.store.set("jumpserverEnabled", "0")?;
+            }
+            Ok(ok(
+                json!({"ok":true,"enabled":jumpserver::enabled(&app.store)?}),
+            ))
         }
         _ => Err(Error::status(404, "Not found")),
     }

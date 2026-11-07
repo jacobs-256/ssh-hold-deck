@@ -24,6 +24,10 @@ test('validation rejects duplicate channels, unsafe names, invalid settings and 
   assert.throws(() => validateBackup(key), /通道配置无效/);
   const port = payload(); port.settings.push({ key: 'service', value: '{"port":-1,"autoSelect":false}' });
   assert.throws(() => validateBackup(port), /备份设置无效/);
+  const enabled = payload(); enabled.settings.push({ key: 'jumpserverEnabled', value: '1' });
+  assert.doesNotThrow(() => validateBackup(enabled));
+  const badEnabled = payload(); badEnabled.settings.push({ key: 'jumpserverEnabled', value: '2' });
+  assert.throws(() => validateBackup(badEnabled), /备份设置无效/);
   const desktop = payload(); desktop.desktop.trayEnabled = false;
   assert.throws(() => validateBackup(desktop), /桌面配置无效/);
 });

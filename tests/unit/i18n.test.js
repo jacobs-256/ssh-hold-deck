@@ -54,3 +54,11 @@ test('English translates dynamic labels and authentication errors while preservi
   assert.equal(t('root@10.0.0.1'), 'root@10.0.0.1');
   assert.equal(locale('zh-CN').t('显示 17 条结果'), '显示 17 条结果');
 });
+
+test('attribute translation accepts either the source or translated tooltip value', () => {
+  const zh = locale('zh-CN'), en = locale('en-US');
+  assert.equal(zh.attribute('刷新'), '刷新');
+  assert.equal(zh.attribute('Refresh'), '刷新');
+  assert.equal(en.attribute('刷新'), 'Refresh');
+  assert.equal(en.attribute('Refresh'), 'Refresh');
+});

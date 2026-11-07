@@ -46,9 +46,14 @@ esac
   const raw = db.prepare('SELECT config FROM channels').get().config;
   assert.equal(raw.includes('ssh-test-secret'), false); db.close();
   assert.equal((await f.api('/api/channels/test/password', { password: 'test-password' })).data.password, 'ssh-test-secret');
+  assert.equal((await f.api('/api/jumpservers/enabled', { enabled: true })).response.status, 400);
   const jms = await f.api('/api/jumpservers', { name: 'test', url: 'https://jms.example.com', keyId: '00000000-0000-0000-0000-000000000001', keySecret: 'fake-secret' });
   assert.equal(jms.response.status, 201);
   assert.equal(jms.data.server.keySecret, undefined);
+  assert.equal((await f.api('/api/jumpservers')).data.enabled, true);
+  assert.equal((await f.api('/api/jumpservers/enabled', { enabled: false })).data.enabled, false);
+  assert.equal((await f.api('/api/jumpservers')).data.enabled, false);
+  assert.equal((await f.api('/api/jumpservers/enabled', { enabled: true })).data.enabled, true);
   const exportBody = { password: 'backup-password', preferences: { 'ssh-hold-theme': 'dark' } };
   const exported = await f.api('/api/settings/backup/export', exportBody);
   assert.equal(exported.response.status, 200, JSON.stringify(exported.data));

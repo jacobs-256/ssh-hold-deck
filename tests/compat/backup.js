@@ -29,11 +29,12 @@ export function validateBackup(payload) {
   }
   const keys = new Set();
   for (const item of payload.settings) {
-    if (!object(item) || !['initialized', 'login_password', 'jumpservers', 'refreshSeconds', 'service'].includes(item.key)
+    if (!object(item) || !['initialized', 'login_password', 'jumpservers', 'jumpserverEnabled', 'refreshSeconds', 'service'].includes(item.key)
       || keys.has(item.key) || typeof item.value !== 'string') invalid('备份设置无效');
     keys.add(item.key);
     let value;
     try { value = JSON.parse(item.value); } catch { invalid('备份设置无效'); }
+    if (item.key === 'jumpserverEnabled' && (!Number.isInteger(value) || value !== 0 && value !== 1)) invalid('备份设置无效');
     if (item.key === 'refreshSeconds' && (!Number.isInteger(value) || value !== 0 && (value < 5 || value > 3600))) invalid('备份设置无效');
     if (item.key === 'service' && (!object(value) || !Number.isInteger(value.port) || value.port !== 0 && (value.port < 1024 || value.port > 65535) || typeof value.autoSelect !== 'boolean')) invalid('备份设置无效');
     if (item.key === 'login_password' && (!object(value) || !/^[a-f0-9]{64}$/.test(value.salt) || !/^[a-f0-9]{128}$/.test(value.hash))) invalid('备份设置无效');

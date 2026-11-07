@@ -50,6 +50,7 @@ fn validate(payload: &Value) -> Result<()> {
             "initialized",
             "login_password",
             "jumpservers",
+            "jumpserverEnabled",
             "refreshSeconds",
             "service",
         ]
@@ -80,6 +81,11 @@ fn validate(payload: &Value) -> Result<()> {
                         return Err(Error::bad("备份设置无效"));
                     }
                     crate::jumpserver::normalize(server, server)?;
+                }
+            }
+            "jumpserverEnabled" => {
+                if !v.as_u64().is_some_and(|n| n <= 1) {
+                    return Err(Error::bad("备份设置无效"));
                 }
             }
             "refreshSeconds" => {

@@ -69,6 +69,9 @@ pub fn public(server: &Value) -> Value {
     value["hasSecret"] = json!(!s(server, "keySecret").is_empty());
     value
 }
+pub fn enabled(store: &crate::store::Store) -> Result<bool> {
+    Ok(store.setting("jumpserverEnabled")?.as_deref() != Some("0") && !store.servers()?.is_empty())
+}
 pub fn authorization(server: &Value, method: &str, path: &str, date: &str) -> String {
     let mut mac = Hmac::<Sha256>::new_from_slice(s(server, "keySecret").as_bytes()).unwrap();
     mac.update(

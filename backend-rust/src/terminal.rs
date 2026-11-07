@@ -71,7 +71,7 @@ pub async fn upgrade(
     }
     if app
         .terminal_count
-        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
+        .try_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
             if n < 24 {
                 Some(n + 1)
             } else {
