@@ -683,11 +683,8 @@ pub async fn run() -> Result<()> {
     let store = store::Store::open(directory)?;
     let desktop = std::env::var("SSH_HOLD_DESKTOP").ok().as_deref() == Some("1");
     let saved: Value = serde_json::from_str(&store.setting("service")?.unwrap_or("{}".into()))?;
-    let host = if desktop {
-        "127.0.0.1".into()
-    } else {
-        std::env::var("HOST").unwrap_or("0.0.0.0".into())
-    };
+    // The web service is local-only; do not expose it on LAN interfaces.
+    let host = "127.0.0.1".to_string();
     let configured = std::env::var("PORT")
         .ok()
         .and_then(|v| v.parse().ok())
@@ -818,8 +815,7 @@ pub(crate) async fn bind(host: &str, port: u16, auto: bool) -> Result<tokio::net
 }
 fn report_ready(app: &App) {
     println!(
-        "SSH Hold Deck Rust: http://{}:{}",
-        app.host,
+        "SSH Hold Deck Rust: http://localhost:{}",
         app.port.load(Ordering::Relaxed)
     );
     if app.desktop {

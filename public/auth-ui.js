@@ -87,7 +87,17 @@
   login.querySelector('.modal-head > i')?.remove();
   const loginFooter = document.createElement('div');
   loginFooter.className = 'login-footer';
-  loginFooter.append('Powered by SSH Hold Deck · ', loginBrand.querySelector('small'));
+  const author = document.createElement('a');
+  author.className = 'login-author';
+  author.href = 'https://github.com/jacobs-256/ssh-hold-deck';
+  author.target = '_blank';
+  author.rel = 'noopener noreferrer';
+  author.textContent = '@Jacobs';
+  if (window.__TAURI__?.core?.invoke) author.addEventListener('click', event => {
+    event.preventDefault();
+    window.__TAURI__.core.invoke('desktop_open_link', { url: author.href }).catch(() => {});
+  });
+  loginFooter.append('Powered by ', author, ' · ', loginBrand.querySelector('small'));
   login.querySelector('form').append(loginFooter);
   const loginForm = login.querySelector('form');
   const retryLogin = document.createElement('button');

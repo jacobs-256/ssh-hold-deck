@@ -18,7 +18,7 @@ test('backup APIs require authentication and confirmation; restore credentials, 
   try {
     const port = await new Promise((resolve, reject) => {
       let output = ''; const timer = setTimeout(() => reject(Error('Server startup timed out')), 15000);
-      child.stdout.on('data', chunk => { output += chunk; const match = output.match(/http:\/\/127\.0\.0\.1:(\d+)/); if (match) { clearTimeout(timer); resolve(match[1]); } });
+      child.stdout.on('data', chunk => { output += chunk; const match = output.match(/http:\/\/localhost:(\d+)/); if (match) { clearTimeout(timer); resolve(match[1]); } });
       child.once('exit', code => { clearTimeout(timer); reject(Error('Server exited ' + code)); });
     });
     const base = `http://127.0.0.1:${port}`; let cookie = '';

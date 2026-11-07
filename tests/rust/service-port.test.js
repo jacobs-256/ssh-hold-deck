@@ -26,7 +26,7 @@ test('authenticated port changes restart HTTP service, retain sessions and persi
     const env={...process.env,HOST:'127.0.0.1',SSH_HOLD_WEB_DATA_DIR:temporary,SSH_HOLD_DIR:path.join(temporary,'hold')};
     delete env.PORT;if(port!==undefined)env.PORT=String(port);
     child=spawn(binary,[],{cwd:path.resolve(import.meta.dirname,'../..'),env,stdio:['ignore','pipe','pipe']});
-    return new Promise((resolve,reject)=>{let output='';const timer=setTimeout(()=>reject(Error('Server start timed out: '+output)),15000);child.stdout.on('data',chunk=>{output+=chunk;const match=output.match(/http:\/\/127\.0\.0\.1:(\d+)/);if(match){clearTimeout(timer);resolve(Number(match[1]));}});child.once('exit',code=>{clearTimeout(timer);reject(Error('Server exited '+code));});});
+    return new Promise((resolve,reject)=>{let output='';const timer=setTimeout(()=>reject(Error('Server start timed out: '+output)),15000);child.stdout.on('data',chunk=>{output+=chunk;const match=output.match(/http:\/\/localhost:(\d+)/);if(match){clearTimeout(timer);resolve(Number(match[1]));}});child.once('exit',code=>{clearTimeout(timer);reject(Error('Server exited '+code));});});
   }
   async function stop(){if(child&&child.exitCode===null){child.kill();await once(child,'exit');}}
   let port=await start(0),cookie='';

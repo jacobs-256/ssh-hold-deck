@@ -33,7 +33,7 @@ export async function fixture(t, prepare = async () => {}, environment = {}) {
     });
     base = await new Promise((resolve, reject) => {
       let output = ''; const timer = setTimeout(() => reject(Error('Rust startup timed out: ' + output)), 15000);
-      child.stdout.on('data', chunk => { output += chunk; const match = /http:\/\/127\.0\.0\.1:\d+/.exec(output); if (match) { clearTimeout(timer); resolve(match[0]); } });
+      child.stdout.on('data', chunk => { output += chunk; const match = /http:\/\/localhost:\d+/.exec(output); if (match) { clearTimeout(timer); resolve(match[0]); } });
       child.stderr.on('data', chunk => { output += chunk; });
       child.once('error', reject);
       child.once('exit', code => { clearTimeout(timer); reject(Error('Rust exited: ' + code + ': ' + output)); });

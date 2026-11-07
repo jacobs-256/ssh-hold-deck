@@ -200,6 +200,9 @@ html body.ui-aligned #login-dialog .modal-head {justify-content:center;padding:2
 html body.ui-aligned #login-dialog .modal-head {display:none}
 html body.ui-aligned #login-dialog .login-footer {margin-top:22px;text-align:center;font-size:11px;line-height:18px;color:var(--muted)}
 html body.ui-aligned #login-dialog .login-footer small {font-size:inherit}
+html body.ui-aligned #login-dialog .login-author {color:var(--accent);font-weight:500;text-decoration:none}
+html body.ui-aligned #login-dialog .login-author:hover {text-decoration:underline}
+html body.ui-aligned #login-dialog .login-author:focus-visible {outline:2px solid color-mix(in srgb,var(--accent) 50%,transparent);outline-offset:2px;border-radius:3px}
 html body.ui-aligned #login-dialog #login-form .modal-head h2 {font-size:16px;line-height:24px;text-align:center}
 html body.ui-aligned #login-dialog label {margin:0 0 18px}
 html body.ui-aligned #login-dialog input {height:44px;margin-top:8px}

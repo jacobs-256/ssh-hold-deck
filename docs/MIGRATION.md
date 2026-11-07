@@ -30,7 +30,7 @@ be recovered accurately from the current database.
 4. Run Rust under the same OS user and hostname: credential encryption depends on
    that identity. To change host/user, restore the portable backup instead.
 5. Set absolute `SSH_HOLD_WEB_DATA_DIR` and `SSH_HOLD_PUBLIC_DIR` paths. Set
-   `HOST=127.0.0.1`, `PORT=8787` for local access and PATH for ssh-hold/helpers.
+   `PORT=8787` and PATH for ssh-hold/helpers. The service listens only on localhost.
 6. Verify login, saved channels, credential decryption, JumpServer, a terminal
    session and backup export before replacing the old installation.
 
@@ -56,7 +56,6 @@ Replace every `/Users/USERNAME`; adapt PATH to your CLI/helper installation.
   <key>ProgramArguments</key><array><string>/Users/USERNAME/.local/libexec/ssh-hold-deck/ssh-hold-backend</string></array>
   <key>WorkingDirectory</key><string>/Users/USERNAME/.local/share/ssh-hold-deck/service</string>
   <key>EnvironmentVariables</key><dict>
-    <key>HOST</key><string>127.0.0.1</string>
     <key>PORT</key><string>8787</string>
     <key>PATH</key><string>/Users/USERNAME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
     <key>SSH_HOLD_WEB_DATA_DIR</key><string>/Users/USERNAME/.local/share/ssh-hold-deck/service/data</string>

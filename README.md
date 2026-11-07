@@ -48,9 +48,9 @@ npm run web:prepare
 npm start
 ```
 
-Open [http://127.0.0.1:8787](http://127.0.0.1:8787). On first use, create a web login password of 8–256 characters. This password is separate from SSH credentials.
+Open [http://localhost:8787](http://localhost:8787). On first use, create a web login password of 8–256 characters. This password is separate from SSH credentials.
 
-The service binds to `0.0.0.0` for trusted LAN access. Other computers can use `http://<server-LAN-IP>:8787`; allow incoming TCP 8787 in the server firewall if needed. Set `HOST=127.0.0.1` for local-only access. Login and same-origin checks apply to LAN access too. HTTP does not encrypt passwords or terminal traffic; use a trusted network. The interface language selector offers Automatic, Simplified Chinese, and English. Automatic follows the browser language. This repository defaults to the English README; use the link above for Chinese documentation.
+The service listens only on localhost. Open `http://localhost:8787` on this machine; other computers cannot connect. HTTP does not encrypt passwords or terminal traffic; use the service locally. The interface language selector offers Automatic, Simplified Chinese, and English. Automatic follows the browser language. This repository defaults to the English README; use the link above for Chinese documentation.
 
 ## Usage
 
@@ -84,7 +84,6 @@ Choose a JumpServer asset when creating a channel, search authorized assets, and
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `8787` | Local HTTP port |
-| `HOST` | `0.0.0.0` | Listen address; use `127.0.0.1` for local-only access |
 | `SSH_HOLD_DIR` | `~/.ssh/hold` | CLI metadata and socket directory |
 | `SSH_HOLD_WEB_DATA_DIR` | Project `data/` directory | SQLite and uploaded private-key storage |
 | `SSH_HOLD_PUBLIC_DIR` | `desktop/backend/public`, falling back to `public` | Prepared browser resources |
@@ -125,7 +124,7 @@ Main modules are under `backend-rust/src/`: `lib.rs` (HTTP and authentication), 
 | PTY startup failure | Check that ssh-hold is executable and the operating system permits PTY allocation |
 | Connect button disabled | Edit the channel to provide a username, host, and password or private-key path |
 | Jump unavailable | Connect the jump channel first; use the import button to import its metadata if needed |
-| Terminal rejected | Use localhost or the server LAN IP, sign in again, and confirm that the channel is connected |
+| Terminal rejected | Use localhost, sign in again, and confirm that the channel is connected |
 | Connected but keepalive stopped | The SSH master and extra keepalive process are independent; Refresh to verify current status |
 
 ## Configuration Backup and Restore
