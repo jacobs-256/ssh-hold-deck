@@ -578,13 +578,15 @@ impl App {
 }
 struct Operation<'a> {
     app: &'a App,
-    name: String,
+    names: Vec<String>,
 }
 impl Drop for Operation<'_> {
     fn drop(&mut self) {
         {
             let mut operations = self.app.operations.lock().unwrap();
-            operations.remove(&self.name);
+            for name in &self.names {
+                operations.remove(name);
+            }
             self.app.status_revision.fetch_add(1, Ordering::SeqCst);
         }
         self.app.publish();
@@ -613,7 +615,13 @@ pub async fn api(
         pieces[2]
     }
     .to_string();
-    if !valid_name(&name) {
+    let target_name = if *method == Method::PUT && pieces.len() > 2 {
+        let requested = s(&body, "name");
+        if requested.is_empty() { name.clone() } else { requested.to_string() }
+    } else {
+        name.clone()
+    };
+    if !valid_name(&name) || !valid_name(&target_name) {
         return Err(Error::bad("通道名称无效"));
     }
     if pieces.get(3) == Some(&"password") && *method == Method::POST {
@@ -630,20 +638,37 @@ pub async fn api(
     if ![Method::POST, Method::PUT, Method::DELETE].contains(method) {
         return Err(Error::status(405, "Method not allowed"));
     }
+    let rename = target_name != name;
+    let mut operation_names = vec![name.clone()];
+    if rename {
+        operation_names.push(target_name.clone());
+    }
     {
         let mut operations = app.operations.lock().unwrap();
-        if !operations.insert(name.clone()) {
+        if operation_names
+            .iter()
+            .any(|candidate| operations.contains(candidate))
+        {
             return Err(Error::status(409, "该通道正在连接或更新，请稍后重试"));
+        }
+        for candidate in &operation_names {
+            operations.insert(candidate.clone());
         }
         app.status_revision.fetch_add(1, Ordering::SeqCst);
     }
     let _guard = Operation {
         app,
-        name: name.clone(),
+        names: operation_names,
     };
     let old = app.store.config(&name)?;
     if pieces.len() > 2 && old.is_none() {
         return Err(Error::status(404, "通道不存在"));
+    }
+    if rename
+        && (app.store.config(&target_name)?.is_some()
+            || app.hold.join(&target_name).exists())
+    {
+        return Err(Error::status(409, "通道名称已存在，请使用其他名称"));
     }
     if *method == Method::DELETE {
         app.stop_channel(&name).await?;
@@ -674,9 +699,9 @@ pub async fn api(
         .unwrap_or_default();
     let mut config = if create || *method == Method::PUT {
         app.identity(&mut body)?;
-        app.config_input(&body, &old.unwrap_or(json!({}))).await?
+        app.config_input(&body, &old.clone().unwrap_or(json!({}))).await?
     } else {
-        old.unwrap()
+        old.clone().unwrap_or(json!({}))
     };
     if create || *method == Method::PUT {
         let note = match body.get("note") {
@@ -688,24 +713,48 @@ pub async fn api(
         }
         config["note"] = json!(note.trim());
     }
+    if rename {
+        if let Some(previous) = old.as_ref() {
+            config["createdAt"] = previous["createdAt"].clone();
+        }
+    }
     let a = availability(&config);
     if a["canConnect"] != true {
         return Err(Error::bad(s(&a, "connectDisabledReason")));
     }
-    app.proxy(&name, &config).await?;
+    app.proxy(&target_name, &config).await?;
     let resolved = app.resolve(&config).await?;
     if !app.store.valid_session(&owner) {
         return Err(Error::status(401, "登录状态已失效"));
     }
     if !create {
-        if *method == Method::PUT {
+        if rename {
+            app.stop_channel(&name).await?;
+            let old_hold = app.hold.join(&name);
+            let new_hold = app.hold.join(&target_name);
+            let moved = if old_hold.exists() {
+                if new_hold.exists() {
+                    return Err(Error::status(409, "通道名称已存在，请使用其他名称"));
+                }
+                std::fs::rename(&old_hold, &new_hold)?;
+                true
+            } else {
+                false
+            };
+            if let Err(error) = app.store.rename(&name, &target_name, &config) {
+                if moved {
+                    let _ = std::fs::rename(&new_hold, &old_hold);
+                }
+                return Err(error);
+            }
+        } else {
             app.store.save(&name, &config)?;
+            app.stop_channel(&name).await?;
         }
-        app.stop_channel(&name).await?;
     }
-    app.start(&name, &config, resolved, &owner).await?;
-    app.store.save(&name, &config)?;
-    let channel = app.result(&name).await?;
+    app.start(&target_name, &config, resolved, &owner).await?;
+    app.store.save(&target_name, &config)?;
+    let channel = app.result(&target_name).await?;
     Ok((
         if create {
             StatusCode::CREATED

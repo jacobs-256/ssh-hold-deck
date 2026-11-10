@@ -65,7 +65,7 @@ First startup imports CLI metadata and migrates credentials from the previous `.
 
 ### Channels and Jump Hosts
 
-Enter a username, host, port, and authentication method when adding or editing a channel. Saving attempts a connection. A selected jump channel must already be connected; self-references and dependency cycles are rejected. Disconnecting retains configuration; deleting removes configuration and closes the connection. An expired one-time password cannot authenticate again merely because it was saved.
+Enter a username, host, port, and authentication method when adding or editing a channel. Channel names can be changed while editing; references from other channels that use it as a jump host are updated automatically. Saving attempts a connection. A selected jump channel must already be connected; self-references and dependency cycles are rejected. Disconnecting retains configuration; deleting removes configuration and closes the connection. An expired one-time password cannot authenticate again merely because it was saved.
 
 ### Web Terminal
 

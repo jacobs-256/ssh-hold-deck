@@ -120,6 +120,51 @@ impl Store {
         )?;
         Ok(())
     }
+    pub fn rename(&self, old: &str, new: &str, config: &Value) -> Result<()> {
+        let mut db = self.db.lock().unwrap();
+        if db
+            .query_row("SELECT 1 FROM channels WHERE name=?", [new], |_| Ok(()))
+            .optional()?
+            .is_some()
+        {
+            return Err(Error::bad("通道名称已存在，请使用其他名称"));
+        }
+        let rows = {
+            let mut stmt = db.prepare("SELECT name,config FROM channels ORDER BY rowid")?;
+            let rows = stmt
+                .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            rows
+        };
+        let mut updates = vec![];
+        for (name, raw) in rows {
+            if name == old {
+                continue;
+            }
+            let mut value = self.unseal(&raw)?;
+            if value["jump"].as_str() == Some(old) {
+                value["jump"] = json!(new);
+                updates.push((name, self.seal(&value)?));
+            }
+        }
+        let sealed = self.seal(config)?;
+        let tx = db.transaction()?;
+        tx.execute("DELETE FROM channels WHERE name=?", [old])?;
+        tx.execute(
+            "INSERT INTO channels(name,config) VALUES(?,?)",
+            rusqlite::params![new, sealed],
+        )?;
+        for (name, raw) in updates {
+            tx.execute(
+                "UPDATE channels SET config=? WHERE name=?",
+                rusqlite::params![raw, name],
+            )?;
+        }
+        tx.execute("DELETE FROM channel_status WHERE name=?", [old])?;
+        tx.execute("DELETE FROM channel_status WHERE name=?", [new])?;
+        tx.commit()?;
+        Ok(())
+    }
     pub fn compare_save(&self, name: &str, previous: &Value, value: &Value) -> Result<bool> {
         let raw = self.seal(value)?;
         let db = self.db.lock().unwrap();
