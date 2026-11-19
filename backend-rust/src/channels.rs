@@ -224,6 +224,27 @@ impl App {
                 .extend(availability(&c).as_object().unwrap().clone());
             out.push(value);
         }
+        // Records left over from a different vault key stay visible as placeholders
+        // so they can be deleted instead of disappearing silently.
+        for name in self.store.unreadable() {
+            out.push(json!({
+                "name": name,
+                "target": "",
+                "status": "无法解密",
+                "keepalive": "",
+                "remote": "",
+                "started": "",
+                "note": "",
+                "jump": "",
+                "auth": "",
+                "source": "manual",
+                "serverName": "",
+                "undecryptable": true,
+                "canConnect": false,
+                "connectDisabledReason": "配置无法用当前密钥解密，请删除后重新创建，或用备份恢复。",
+                "hasPassword": false
+            }));
+        }
         Ok(json!(out))
     }
     pub fn import_channels(&self) -> Result<(u64, Vec<String>)> {
@@ -661,7 +682,7 @@ pub async fn api(
         names: operation_names,
     };
     let old = app.store.config(&name)?;
-    if pieces.len() > 2 && old.is_none() {
+    if pieces.len() > 2 && old.is_none() && !app.store.is_unreadable(&name) {
         return Err(Error::status(404, "通道不存在"));
     }
     if rename

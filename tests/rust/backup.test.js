@@ -32,7 +32,7 @@ test('backup APIs require authentication and confirmation; restore credentials, 
     cookie = setup.response.headers.get('set-cookie').split(';')[0];
     assert.equal((await request('/api/settings/backup/export', exportBody, 'https://evil.test')).response.status, 403);
     db = new DatabaseSync(path.join(directory, 'channels.sqlite'));
-    const vaultKey = crypto.createHash('sha256').update(`${os.userInfo().username}:${os.hostname()}:ssh-hold-web-v1`).digest();
+    const vaultKey = Buffer.from(await readFile(path.join(directory, 'vault.key'), 'utf8'), 'hex');
     const encrypt = value => {
       const iv = crypto.randomBytes(12), cipher = crypto.createCipheriv('aes-256-gcm', vaultKey, iv);
       const data = Buffer.concat([cipher.update(JSON.stringify(value)), cipher.final()]);

@@ -680,6 +680,11 @@ pub async fn run() -> Result<()> {
     let directory = std::env::var_os("SSH_HOLD_WEB_DATA_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| project.join("data"));
+    eprintln!(
+        "SSH Hold Deck backend: starting (data={}, public={})",
+        directory.display(),
+        root.display()
+    );
     let store = store::Store::open(directory)?;
     let desktop = std::env::var("SSH_HOLD_DESKTOP").ok().as_deref() == Some("1");
     let saved: Value = serde_json::from_str(&store.setting("service")?.unwrap_or("{}".into()))?;
@@ -693,8 +698,10 @@ pub async fn run() -> Result<()> {
                 .as_u64()
                 .unwrap_or(if desktop { 0 } else { 8787 }) as u16,
         );
+    eprintln!("SSH Hold Deck backend: binding {host}:{configured}");
     let listener = bind(&host, configured, desktop || saved["autoSelect"] == true).await?;
     let port = listener.local_addr()?.port();
+    eprintln!("SSH Hold Deck backend: listening on 127.0.0.1:{port}");
     let (events, _) = broadcast::channel(32);
     let (shutdown, _) = watch::channel(false);
     let (generation, _) = watch::channel(0);
@@ -729,17 +736,29 @@ pub async fn run() -> Result<()> {
         rebind,
     });
     if app.store.setting("initialized")?.is_none() {
+        eprintln!("SSH Hold Deck backend: checking first-run migration");
         let vault = app.hold.join(".web-vault");
+        let mut migrated = true;
         if vault.exists() {
-            let values = app.store.unseal(&std::fs::read_to_string(vault)?)?;
-            if let Some(values) = values.as_object() {
-                for (name, config) in values {
-                    app.store.save(name, config)?;
+            match app.store.unseal(&std::fs::read_to_string(vault)?) {
+                Ok(values) => {
+                    if let Some(values) = values.as_object() {
+                        for (name, config) in values {
+                            app.store.save(name, config)?;
+                        }
+                    }
+                }
+                Err(error) => {
+                    eprintln!("skipping legacy .web-vault migration: {error}");
+                    migrated = false;
                 }
             }
         }
         app.import_channels()?;
-        app.store.set("initialized", "1")?;
+        // Leave the marker unset so a later start with the right key can retry.
+        if migrated {
+            app.store.set("initialized", "1")?;
+        }
     }
     let shutdown = app.shutdown.clone();
     tokio::spawn(async move {

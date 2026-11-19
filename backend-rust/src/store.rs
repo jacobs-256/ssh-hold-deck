@@ -10,6 +10,7 @@ pub struct Store {
     pub db: Mutex<Connection>,
     pub directory: PathBuf,
     key: [u8; 32],
+    unreadable: Mutex<Vec<String>>,
 }
 pub fn private_dir(path: &Path) -> Result<()> {
     std::fs::create_dir_all(path)?;
@@ -24,18 +25,152 @@ pub fn private_mode(path: &Path, mode: u32) -> Result<()> {
     let _ = (path, mode);
     Ok(())
 }
+fn unseal_with(raw: &str, key: &[u8; 32]) -> Result<Value> {
+    crypto::decrypt(&serde_json::from_str(raw)?, key)
+}
+fn rows(db: &Connection) -> Result<Vec<(String, String)>> {
+    let mut stmt = db.prepare("SELECT name,config FROM channels ORDER BY rowid")?;
+    let rows = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+fn write_key(path: &Path, key: &[u8; 32]) -> Result<()> {
+    std::fs::write(path, crypto::encode_key(key))?;
+    private_mode(path, 0o600)
+}
+fn host_variants(host: &str) -> Vec<String> {
+    let mut names = vec![host.to_string(), host.to_lowercase()];
+    if !host.contains('.') {
+        names.push(format!("{host}.local"));
+    }
+    names.sort();
+    names.dedup();
+    names
+}
+fn extra_legacy_keys(directory: &Path) -> Vec<[u8; 32]> {
+    let mut sources = Vec::new();
+    if let Ok(text) = std::fs::read_to_string(directory.join("legacy-identity.txt")) {
+        sources.push(text);
+    }
+    if let Ok(text) = std::env::var("SSH_HOLD_LEGACY_IDENTITY") {
+        sources.push(text);
+    }
+    let mut keys = Vec::new();
+    for text in sources {
+        for line in text.lines().flat_map(|line| line.split(',')) {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let (user, host) = match line.split_once(':') {
+                Some((user, host)) => (Some(user.trim()), host.trim()),
+                None => (None, line),
+            };
+            if host.is_empty() {
+                continue;
+            }
+            for name in host_variants(host) {
+                keys.push(match user {
+                    Some(user) if !user.is_empty() => crypto::legacy_key_for_identity(user, &name),
+                    _ => crypto::legacy_key_for(&name),
+                });
+            }
+        }
+    }
+    keys.sort();
+    keys.dedup();
+    keys
+}
+fn backup_key(directory: &Path, path: &Path) {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0);
+    let backup = directory.join(format!("{}.unreadable-{stamp}", crypto::KEY_FILE));
+    if std::fs::copy(path, &backup).is_ok() {
+        let _ = private_mode(&backup, 0o600);
+        eprintln!("backed up unreadable vault.key to {}", backup.display());
+    }
+}
+/// The vault key used to live only in the hostname-derived value. Persisting it
+/// keeps stored credentials readable when the machine's hostname changes, and
+/// the legacy candidates let existing installations keep their data.
+fn load_key(directory: &Path, stored: &[(String, String)]) -> Result<[u8; 32]> {
+    let path = directory.join(crypto::KEY_FILE);
+    let existing = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|text| crypto::parse_key(&text));
+    if let Some(key) = existing {
+        if stored.is_empty()
+            || stored
+                .iter()
+                .any(|(_, raw)| unseal_with(raw, &key).is_ok())
+        {
+            return Ok(key);
+        }
+        eprintln!("vault.key cannot decrypt the existing records; trying legacy identities");
+    } else if std::fs::metadata(&path).is_ok() {
+        eprintln!("vault.key is invalid; selecting a key for the existing records");
+    } else {
+        eprintln!("vault.key not found; selecting a key for the existing records");
+    }
+    let adopted = if stored.is_empty() {
+        None
+    } else {
+        let mut candidates = crypto::legacy_keys();
+        candidates.extend(extra_legacy_keys(directory));
+        candidates.sort();
+        candidates.dedup();
+        candidates
+            .into_iter()
+            .max_by_key(|key| {
+                stored
+                    .iter()
+                    .filter(|(_, raw)| unseal_with(raw, key).is_ok())
+                    .count()
+            })
+            .filter(|key| stored.iter().any(|(_, raw)| unseal_with(raw, key).is_ok()))
+    };
+    if let Some(key) = adopted {
+        if existing.is_some() {
+            backup_key(directory, &path);
+        }
+        write_key(&path, &key)?;
+        eprintln!("adopted a legacy vault key for existing records");
+        return Ok(key);
+    }
+    if let Some(key) = existing {
+        eprintln!("no legacy key matched; keeping the existing vault.key");
+        return Ok(key);
+    }
+    let key = crypto::random::<32>();
+    write_key(&path, &key)?;
+    Ok(key)
+}
 impl Store {
     pub fn open(directory: PathBuf) -> Result<Self> {
+        eprintln!("SSH Hold Deck backend: opening data store {}", directory.display());
         private_dir(&directory)?;
         let file = directory.join("channels.sqlite");
         let db = Connection::open(&file)?;
         private_mode(&file, 0o600)?;
         db.busy_timeout(std::time::Duration::from_secs(5))?;
         db.execute_batch("CREATE TABLE IF NOT EXISTS channels(name TEXT PRIMARY KEY,config TEXT NOT NULL);CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);CREATE TABLE IF NOT EXISTS channel_status(name TEXT PRIMARY KEY,snapshot TEXT NOT NULL);CREATE TABLE IF NOT EXISTS web_sessions(token_hash TEXT PRIMARY KEY,expires INTEGER NOT NULL);")?;
+        let stored = rows(&db)?;
+        eprintln!("SSH Hold Deck backend: resolving vault key ({} records)", stored.len());
+        let key = load_key(&directory, &stored)?;
+        let unreadable = stored
+            .iter()
+            .filter(|(_, raw)| unseal_with(raw, &key).is_err())
+            .map(|(name, _)| name.clone())
+            .collect::<Vec<_>>();
+        eprintln!("SSH Hold Deck backend: vault ready, {} unreadable records", unreadable.len());
         let store = Self {
             db: Mutex::new(db),
             directory,
-            key: crypto::vault_key(),
+            key,
+            unreadable: Mutex::new(unreadable),
         };
         for (name, config) in store.configs()? {
             if config["createdAt"].as_str().unwrap_or("").is_empty() {
@@ -43,6 +178,15 @@ impl Store {
             }
         }
         Ok(store)
+    }
+    /// Channels whose stored configuration cannot be decrypted with the current
+    /// key. They are left in the database but skipped when listing so that a
+    /// single damaged record cannot stop the service from starting.
+    pub fn unreadable(&self) -> Vec<String> {
+        self.unreadable.lock().unwrap().clone()
+    }
+    pub fn is_unreadable(&self, name: &str) -> bool {
+        self.unreadable.lock().unwrap().iter().any(|entry| entry == name)
     }
     pub fn setting(&self, key: &str) -> Result<Option<String>> {
         Ok(self
@@ -69,9 +213,16 @@ impl Store {
     }
     pub fn configs(&self) -> Result<Vec<(String, Value)>> {
         let raw = self.raw_configs()?;
-        raw.into_iter()
-            .map(|(name, raw)| Ok((name, self.unseal(&raw)?)))
-            .collect()
+        let mut readable = vec![];
+        let mut unreadable = vec![];
+        for (name, raw) in raw {
+            match unseal_with(&raw, &self.key) {
+                Ok(value) => readable.push((name, value)),
+                Err(_) => unreadable.push(name),
+            }
+        }
+        *self.unreadable.lock().unwrap() = unreadable;
+        Ok(readable)
     }
     pub fn raw_configs(&self) -> Result<Vec<(String, String)>> {
         let db = self.db.lock().unwrap();
@@ -90,7 +241,17 @@ impl Store {
                 r.get(0)
             })
             .optional()?;
-        raw.map(|r| self.unseal(&r)).transpose()
+        let Some(raw) = raw else { return Ok(None) };
+        match unseal_with(&raw, &self.key) {
+            Ok(value) => Ok(Some(value)),
+            // Unreadable records behave as missing so the channel can be deleted
+            // or recreated instead of trapping the name forever.
+            Err(error) if self.is_unreadable(name) => {
+                eprintln!("ignoring unreadable channel record {name}: {error}");
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
     }
     pub fn save(&self, name: &str, value: &Value) -> Result<()> {
         let previous = self.config(name)?.unwrap_or(json!({}));
@@ -141,7 +302,9 @@ impl Store {
             if name == old {
                 continue;
             }
-            let mut value = self.unseal(&raw)?;
+            let Ok(mut value) = unseal_with(&raw, &self.key) else {
+                continue;
+            };
             if value["jump"].as_str() == Some(old) {
                 value["jump"] = json!(new);
                 updates.push((name, self.seal(&value)?));
@@ -173,7 +336,7 @@ impl Store {
                 r.get(0)
             })
             .optional()?;
-        if existing.map(|s| self.unseal(&s)).transpose()?.as_ref() != Some(previous) {
+        if existing.and_then(|s| unseal_with(&s, &self.key).ok()).as_ref() != Some(previous) {
             return Ok(false);
         }
         db.execute(
@@ -186,10 +349,14 @@ impl Store {
         let Some(raw) = self.setting("jumpservers")? else {
             return Ok(vec![]);
         };
-        Ok(self.unseal(&raw)?["servers"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default())
+        let value = match unseal_with(&raw, &self.key) {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("ignoring unreadable JumpServer settings: {error}");
+                return Ok(vec![]);
+            }
+        };
+        Ok(value["servers"].as_array().cloned().unwrap_or_default())
     }
     pub fn save_servers(&self, servers: Vec<Value>) -> Result<()> {
         self.set("jumpservers", &self.seal(&json!({"servers":servers}))?)

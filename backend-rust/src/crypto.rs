@@ -17,16 +17,87 @@ pub fn random<const N: usize>() -> [u8; N] {
 pub fn digest(value: &str) -> String {
     hex::encode(Sha256::digest(value.as_bytes()))
 }
-pub fn vault_key() -> [u8; 32] {
-    Sha256::digest(
-        format!(
-            "{}:{}:ssh-hold-web-v1",
-            whoami::username(),
-            hostname::get().unwrap_or_default().to_string_lossy()
-        )
-        .as_bytes(),
-    )
-    .into()
+/// File holding the persisted vault key inside the data directory.
+pub const KEY_FILE: &str = "vault.key";
+/// Earlier releases derived the vault key from the live hostname, so data
+/// became unreadable when the machine's hostname changed. The seed is kept for
+/// reading data written by those releases.
+pub fn legacy_key_for_identity(user: &str, host: &str) -> [u8; 32] {
+    Sha256::digest(format!("{user}:{host}:ssh-hold-web-v1").as_bytes()).into()
+}
+pub fn legacy_key_for(host: &str) -> [u8; 32] {
+    legacy_key_for_identity(&whoami::username(), host)
+}
+#[cfg(target_os = "macos")]
+fn scutil_value(option: &str) -> Option<String> {
+    use std::{
+        process::{Command, Stdio},
+        time::{Duration, Instant},
+    };
+    let mut child = Command::new("/usr/sbin/scutil")
+        .args(["--get", option])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let output = child.wait_with_output().ok()?;
+                return status
+                    .success()
+                    .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string());
+            }
+            Ok(None) if started.elapsed() < Duration::from_millis(750) => {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+        }
+    }
+}
+/// Keys that older releases may have used, covering every hostname the current
+/// machine is known by (gethostname plus macOS local/computer names).
+pub fn legacy_keys() -> Vec<[u8; 32]> {
+    let mut hosts = Vec::new();
+    if let Ok(name) = hostname::get() {
+        hosts.push(name.to_string_lossy().trim().to_string());
+    }
+    #[cfg(target_os = "macos")]
+    for option in ["HostName", "LocalHostName", "ComputerName"] {
+        if let Some(value) = scutil_value(option) {
+            hosts.push(value);
+        }
+    }
+    let mut hosts = hosts
+        .into_iter()
+        .filter(|host| !host.is_empty())
+        .flat_map(|host| {
+            let mut names = vec![host.clone(), host.to_lowercase()];
+            if !host.contains('.') {
+                names.push(format!("{host}.local"));
+            }
+            names
+        })
+        .collect::<Vec<_>>();
+    hosts.sort();
+    hosts.dedup();
+    let mut keys = hosts.iter().map(|host| legacy_key_for(host)).collect::<Vec<_>>();
+    keys.sort();
+    keys.dedup();
+    keys
+}
+pub fn parse_key(text: &str) -> Option<[u8; 32]> {
+    let bytes = hex::decode(text.trim()).ok()?;
+    bytes.try_into().ok()
+}
+pub fn encode_key(key: &[u8; 32]) -> String {
+    hex::encode(key)
 }
 pub fn encrypt(value: &Value, key: &[u8; 32]) -> Result<Value> {
     let iv = random::<12>();
@@ -102,6 +173,14 @@ mod tests {
     #[test]
     fn node_scrypt_fixture() {
         assert_eq!(hex::encode(derive("test-password","0123456789abcdef".repeat(4).as_bytes(),64).unwrap()),"8fd0f88e7e5a48e2adf9d882fa67d0c774d427c33cd3e00039a5cc3c7eb5702ba0c252b51a1a50a2f9eb83e868823d7aa02f04a7d0022bde0057fa26f676ab44");
+    }
+    #[test]
+    fn vault_key_material_roundtrip() {
+        let key = legacy_key_for("host.example");
+        assert_eq!(parse_key(&encode_key(&key)), Some(key));
+        assert!(parse_key("not-hex").is_none());
+        let current = hostname::get().unwrap_or_default().to_string_lossy().into_owned();
+        assert!(legacy_keys().contains(&legacy_key_for(&current)));
     }
     #[test]
     fn vault_roundtrip_and_tampering() {

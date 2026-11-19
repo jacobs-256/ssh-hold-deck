@@ -102,9 +102,11 @@ function render(){
       const template=document.createElement('template');template.innerHTML=`<table><tbody>${rowHtml(channel)}</tbody></table>`;const replacement=template.content.querySelector('tr');replacement.dataset.snapshot=signature;
       replacement.cells[0].querySelector('.subtext')?.remove();
       if(channel.note){const note=document.createElement('span');note.className='subtext channel-note';note.textContent=channel.note;replacement.cells[0].append(note);}
-      replacement.querySelector('.actions button').classList.add('terminal-action');
       const power=replacement.querySelector('.connect-button');
-      power.dataset.state=power.disabled?'unavailable':channel.status==='畅通'?'connected':'disconnected';
+      if(power){
+        replacement.querySelector('.actions button')?.classList.add('terminal-action');
+        power.dataset.state=power.disabled?'unavailable':channel.status==='畅通'?'connected':'disconnected';
+      }
       if(channel.operatingSystem||channel.architecture){
         const platform=document.createElement('span');platform.className='channel-platform';
         const description=[channel.operatingSystem,channel.architecture].filter(Boolean).join(' · ');
@@ -130,6 +132,7 @@ function render(){
   lucide.createIcons();tableWrap.scrollTop=scrollTop;
 }
 function rowHtml(x){
+  if(x.undecryptable)return I18n.html(`<tr data-channel="${esc(x.name)}" class="is-undecryptable"><td><span class="channel-name"><span class="name" title="${esc(x.name)}">${esc(x.name)}</span></span></td><td colspan="6" class="empty">${esc(I18n.t('配置无法用当前密钥解密，请删除后重新创建，或用备份恢复。'))}</td><td><div class="actions"><button class="danger" title="删除" aria-label="删除" onclick="removeChannel('${esc(x.name)}')"><i data-lucide="trash-2"></i></button></div></td></tr>`);
   const gateway=x.source==='jumpserver'?x.serverName:x.jump||I18n.t('直连');
   const jumpserverChannel=x.source==='jumpserver'||x.auth==='jumpserver';
   const integrationDisabled=!jmsUI.isEnabled()&&jumpserverChannel&&x.status!=='畅通';

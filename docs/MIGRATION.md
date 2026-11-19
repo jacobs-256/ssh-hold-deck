@@ -27,8 +27,10 @@ be recovered accurately from the current database.
 2. Stop the old service and copy its entire web data directory, including uploaded
    keys and SQLite sidecars. Keep the original snapshot untouched.
 3. Preserve SSH configuration and `SSH_HOLD_DIR` (normally `~/.ssh/hold`).
-4. Run Rust under the same OS user and hostname: credential encryption depends on
-   that identity. To change host/user, restore the portable backup instead.
+4. Run Rust under the same OS user: records written by earlier releases are
+   matched against the legacy username/hostname-derived key, and the adopted key is
+   then stored in `vault.key` in the data directory. To change host or user, copy
+   `vault.key` together with the data directory, or restore the portable backup.
 5. Set absolute `SSH_HOLD_WEB_DATA_DIR` and `SSH_HOLD_PUBLIC_DIR` paths. Set
    `PORT=8787` and PATH for ssh-hold/helpers. The service listens only on localhost.
 6. Verify login, saved channels, credential decryption, JumpServer, a terminal

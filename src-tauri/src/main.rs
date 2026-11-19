@@ -3,10 +3,11 @@
 mod updates;
 
 use std::{
-    io::{BufRead, BufReader},
+    collections::VecDeque,
+    io::{BufRead, BufReader, Write},
     path::PathBuf,
     process::{Child, Command, Stdio},
-    sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex},
+    sync::{atomic::{AtomicBool, Ordering}, mpsc::RecvTimeoutError, Arc, Mutex},
     time::Duration,
 };
 use tauri::{Manager, WebviewUrl};
@@ -179,10 +180,25 @@ fn start_backend(app: tauri::AppHandle, state: Arc<Backend>) -> Result<(), Strin
     let logs = app.path().app_log_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&logs).map_err(|e| e.to_string())?;
     let log = std::fs::File::create(logs.join("backend.log")).map_err(|e| e.to_string())?;
-    let mut child = command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::from(log)).spawn()
+    let mut child = command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()
         .map_err(|e| format!("{e}\nBackend resources: {}", command.get_program().to_string_lossy()))?;
     let stdout = child.stdout.take().ok_or("Missing backend stdout")?;
+    let stderr = child.stderr.take().ok_or("Missing backend stderr")?;
     *state.child.lock().unwrap() = Some(child);
+    // Keep the log on disk and a short tail in memory so startup failures can show
+    // the backend's own error instead of only a generic timeout.
+    let tail = Arc::new(Mutex::new(VecDeque::<String>::new()));
+    let stderr_tail = tail.clone();
+    let stderr_log = std::thread::spawn(move || {
+        let mut log = log;
+        for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+            let _ = writeln!(log, "{line}");
+            let _ = log.flush();
+            let mut tail = stderr_tail.lock().unwrap();
+            tail.push_back(line);
+            while tail.len() > 20 { tail.pop_front(); }
+        }
+    });
     let (sender, receiver) = std::sync::mpsc::channel();
     let reader_state = state.clone();
     let reader_app = app.clone();
@@ -198,12 +214,43 @@ fn start_backend(app: tauri::AppHandle, state: Arc<Backend>) -> Result<(), Strin
                 }
             }
         }
-        *reader_state.port.lock().unwrap() = None;
-        if !reader_state.stopping.load(Ordering::Acquire) {
+        let was_running = reader_state.port.lock().unwrap().take().is_some();
+        if was_running && !reader_state.stopping.load(Ordering::Acquire) {
             show_error(&reader_app, "The backend exited. Check backend.log in the application log directory.");
         }
     });
-    let port = receiver.recv_timeout(Duration::from_secs(90)).map_err(|_| "Backend startup timed out. Check backend.log; on Windows verify WSL2 is initialized.".to_string())?;
+    let port = match receiver.recv_timeout(Duration::from_secs(90)) {
+        Ok(port) => port,
+        Err(RecvTimeoutError::Timeout) => {
+            let detail = tail.lock().unwrap().iter().cloned().collect::<Vec<_>>().join("
+");
+            let log_path = logs.join("backend.log");
+            let hint = if cfg!(windows) {
+                "\nOn Windows, verify WSL2 is initialized."
+            } else {
+                ""
+            };
+            return Err(if detail.trim().is_empty() {
+                format!("Backend startup timed out.\nLog: {}{}", log_path.display(), hint)
+            } else {
+                format!(
+                    "Backend startup timed out.\nLog: {}\n\n{}{}",
+                    log_path.display(),
+                    detail.trim(),
+                    hint
+                )
+            });
+        }
+        Err(RecvTimeoutError::Disconnected) => {
+            let _ = stderr_log.join();
+            let detail = tail.lock().unwrap().iter().cloned().collect::<Vec<_>>().join("\n");
+            return Err(if detail.trim().is_empty() {
+                "The backend exited during startup. Check backend.log in the application log directory.".into()
+            } else {
+                format!("The backend exited during startup:\n\n{}", detail.trim())
+            });
+        }
+    };
     if let Some(window) = app.get_webview_window("main") {
         window.navigate(format!("http://127.0.0.1:{port}/").parse().unwrap()).map_err(|e| e.to_string())?;
     }

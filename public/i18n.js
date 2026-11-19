@@ -76,6 +76,7 @@
     '选择文件': 'Choose File', '私钥文件不能超过 64KB': 'Private key files must not exceed 64 KB',
     '从 ~/.ssh/hold 导入通道配置': 'Import channels from ~/.ssh/hold', '导入中…': 'Importing…',
     '通道名称已复制': 'Channel name copied', '复制失败，请检查浏览器剪贴板权限': 'Copy failed. Check clipboard permissions.',
+    '配置无法用当前密钥解密，请删除后重新创建，或用备份恢复。': 'This configuration cannot be decrypted with the current key. Delete and recreate it, or restore a backup.',
     '请重新登录': 'Please sign in again', '请求失败': 'Request failed', '没有符合条件的通道': 'No matching channels',
     '直连': 'Direct', '本机通道': 'Local channel', '⚿ SSH 私钥': 'SSH Key', '● 用户名 / 密码': 'Password',
     '复制通道名称': 'Copy channel name', '打开终端': 'Open Terminal', '断开通道': 'Disconnect', '连接通道': 'Connect',
